@@ -1334,6 +1334,20 @@ function applyCountyFilters(data) {
   return spatial;
 }
 
+function zoomToCountyLayer(layer) {
+  if (!layer || typeof layer.getBounds !== "function") {
+    return;
+  }
+  try {
+    const bounds = layer.getBounds();
+    if (bounds && bounds.isValid && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 11 });
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 function toggleCountySelection(feature, layer) {
   if (selectedCountyLayer === layer) {
     selectedCounty = null;
@@ -1354,6 +1368,7 @@ function toggleCountySelection(feature, layer) {
     const label = feature.properties?.name || feature.id || "Selected county";
     setStatus(`Filtering by county: ${label}`);
     selectedCountyLayer.bringToFront();
+    zoomToCountyLayer(layer);
     if (countyLabelLayer && typeof turf !== "undefined") {
       countyLabelLayer.clearLayers();
       try {
@@ -1747,22 +1762,13 @@ function selectCountyByName(state, countyName) {
     return;
   }
   
-  // Clear if clicking same county
-  if (selectedCountyLayer === layer) {
-    toggleCountySelection(layer.feature, layer);
-  } else {
-    // Select new county
+  // Keep selection and always zoom when selecting from table
+  if (selectedCountyLayer !== layer) {
     expandedCounties.clear();
     toggleCountySelection(layer.feature, layer);
-    
-    // Zoom to county
-    try {
-      const bounds = layer.getBounds();
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 11 });
-    } catch (error) {
-      console.error(error);
-    }
   }
+
+  zoomToCountyLayer(layer);
 }
 
 async function loadStateBoundaries() {
