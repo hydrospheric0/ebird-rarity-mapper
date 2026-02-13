@@ -109,19 +109,37 @@ fi
 if [[ "$stage_mode" == "tracked" ]]; then
   mapfile -t untracked_files < <(git ls-files --others --exclude-standard)
   if (( ${#untracked_files[@]} > 0 )); then
-    preview_count=20
-    total_count=${#untracked_files[@]}
-    echo "ERROR: Untracked files present while using tracked-only mode." >&2
-    echo "These can block pull --rebase if upstream tracks same paths." >&2
-    echo "Either run with --all, or stash/remove untracked files first." >&2
-    echo "Found $total_count untracked paths. Showing first $preview_count:" >&2
-    for path in "${untracked_files[@]:0:$preview_count}"; do
-      echo "  - $path" >&2
-    done
-    if (( total_count > preview_count )); then
-      echo "  ... and $((total_count - preview_count)) more" >&2
+    git fetch -q origin "$branch" || true
+    if git rev-parse --verify -q "origin/$branch" >/dev/null; then
+      mapfile -t upstream_tracked < <(git ls-tree -r --name-only "origin/$branch")
+      declare -A upstream_map=()
+      for path in "${upstream_tracked[@]}"; do
+        upstream_map["$path"]=1
+      done
+
+      conflicting_untracked=()
+      for path in "${untracked_files[@]}"; do
+        if [[ -n "${upstream_map[$path]+x}" ]]; then
+          conflicting_untracked+=("$path")
+        fi
+      done
+
+      if (( ${#conflicting_untracked[@]} > 0 )); then
+        preview_count=20
+        total_count=${#conflicting_untracked[@]}
+        echo "ERROR: Untracked files conflict with files tracked on origin/$branch." >&2
+        echo "These can block pull --rebase by preventing checkout of upstream files." >&2
+        echo "Either run with --all, or stash/remove the conflicting untracked files first." >&2
+        echo "Found $total_count conflicting untracked paths. Showing first $preview_count:" >&2
+        for path in "${conflicting_untracked[@]:0:$preview_count}"; do
+          echo "  - $path" >&2
+        done
+        if (( total_count > preview_count )); then
+          echo "  ... and $((total_count - preview_count)) more" >&2
+        fi
+        exit 1
+      fi
     fi
-    exit 1
   fi
 fi
 
