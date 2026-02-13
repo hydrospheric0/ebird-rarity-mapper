@@ -1394,15 +1394,13 @@ function zoomToCountyLayer(layer) {
 
 function toggleCountySelection(feature, layer) {
   if (selectedCountyLayer === layer) {
-    selectedCounty = null;
-    selectedCountyId = null;
-    selectedCountyLayer = null;
-    selectedCountyName = null;
+    const label = feature?.properties?.name || feature?.id || "Selected county";
     countyLayer.setStyle(getCountyStyle);
-    if (countyLabelLayer) {
-      countyLabelLayer.clearLayers();
+    if (selectedCountyLayer && typeof selectedCountyLayer.bringToFront === "function") {
+      selectedCountyLayer.bringToFront();
     }
-    setStatus("County filter cleared.");
+    setStatus(`Filtering by county: ${label}`);
+    zoomToCountyLayer(layer);
   } else {
     selectedCounty = feature;
     selectedCountyId = feature.id || feature.properties?.id || null;
