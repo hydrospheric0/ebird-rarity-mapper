@@ -1888,7 +1888,11 @@ function zoomToRegion(regionCode) {
     const layer = L.geoJSON(feature);
     const bounds = layer.getBounds();
     if (bounds && bounds.isValid()) {
-      map.fitBounds(bounds.pad(0.1), { maxZoom: 7 });
+      map.fitBounds(bounds.pad(0.1), { maxZoom: 8 });
+      map.once("moveend", () => {
+        const currentZoom = map.getZoom();
+        map.setZoom(Math.min(currentZoom + 1, 10));
+      });
     }
   } catch (error) {
     console.error(error);
