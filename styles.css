@@ -1,5 +1,5 @@
 :root {
-  --header-bg: #1b2a47;
+  --header-bg: #0c1b50;
   --accent-teal: #009688;
   --accent-green: #748938;
   --accent-slate: #4b6576;
@@ -153,7 +153,7 @@ h6 {
 
 
 .panel {
-  background: #e5e7eb;
+  background: var(--header-bg);
   border-right: 1px solid var(--panel-border);
   display: flex;
   flex-direction: column;
