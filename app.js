@@ -564,6 +564,24 @@ function renderAllMarkers() {
 
     // Only show individual markers for selected county
     if (isSelectedCounty) {
+      const labelCountsByLocation = new Map();
+      const labelIndexByLocation = new Map();
+      [...notableItems, ...lower48Items].forEach((item) => {
+        const key = item?.locId || item?.locName || `${item?.lat},${item?.lng}`;
+        if (!key) return;
+        labelCountsByLocation.set(key, (labelCountsByLocation.get(key) || 0) + 1);
+      });
+
+      const getLabelOffset = (item) => {
+        const key = item?.locId || item?.locName || `${item?.lat},${item?.lng}`;
+        if (!key) return [8, 0];
+        const index = labelIndexByLocation.get(key) || 0;
+        const total = labelCountsByLocation.get(key) || 1;
+        labelIndexByLocation.set(key, index + 1);
+        const centerOffset = ((total - 1) * 12) / 2;
+        return [8, index * 12 - centerOffset];
+      };
+
       // Render Notable observations as blue markers
       const bestBySpeciesLocation = new Map();
       notableItems.forEach((item) => {
@@ -637,22 +655,23 @@ function renderAllMarkers() {
           : (item.locName || "");
         
         const hoverContent = `
-          <div style="min-width: 160px;">
-            <div style="font-weight: 600; margin-bottom: 4px;">${item.comName}</div>
-            <div style="margin-bottom: 4px; font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
-            <div style="display: flex; align-items: center; gap: 6px;">
+          <div style="display: inline-block;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
               ${abaBadge}
+              <div style="font-weight: 600;">${item.comName}</div>
             </div>
+            <div style="font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
           </div>
         `;
         
         // Show species label if enabled
         if (showSpeciesLabels && showSpeciesLabels.checked) {
+          const labelOffset = getLabelOffset(item);
           marker.bindTooltip(item.comName, {
             permanent: true,
             direction: "right",
             className: "species-label",
-            offset: [8, 0]
+            offset: labelOffset
           });
         } else {
           marker.bindTooltip(hoverContent, { sticky: true, direction: "top" });
@@ -662,7 +681,7 @@ function renderAllMarkers() {
           autoPan: true,
           autoPanPadding: [50, 50],
           closeButton: true,
-          maxWidth: 300
+          maxWidth: 220
         });
 
         targetLayer.addLayer(marker);
@@ -706,22 +725,23 @@ function renderAllMarkers() {
           : (item.locName || "");
         
         const hoverContent = `
-          <div style="min-width: 160px;">
-            <div style="font-weight: 600; margin-bottom: 4px;">${item.comName}</div>
-            <div style="margin-bottom: 4px; font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
-            <div style="display: flex; align-items: center; gap: 6px;">
+          <div style="display: inline-block;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
               ${abaBadge}
+              <div style="font-weight: 600;">${item.comName}</div>
             </div>
+            <div style="font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
           </div>
         `;
         
         // Show species label if enabled
         if (showSpeciesLabels && showSpeciesLabels.checked) {
+          const labelOffset = getLabelOffset(item);
           marker.bindTooltip(item.comName, {
             permanent: true,
             direction: "right",
             className: "species-label",
-            offset: [8, 0]
+            offset: labelOffset
           });
         } else {
           marker.bindTooltip(hoverContent, { sticky: true, direction: "top" });
@@ -731,7 +751,7 @@ function renderAllMarkers() {
           autoPan: true,
           autoPanPadding: [50, 50],
           closeButton: true,
-          maxWidth: 300
+          maxWidth: 220
         });
 
         abaLayer.addLayer(marker);
