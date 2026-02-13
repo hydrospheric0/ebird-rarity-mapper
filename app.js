@@ -293,19 +293,22 @@ function updateSelectedRegionTitle() {
 }
 
 function updateQueryDisplay(region, back) {
+  const backDays = Number.isFinite(Number(back))
+    ? Math.max(1, Math.min(7, Number(back)))
+    : 7;
   if (raritiesQueryEl) {
     raritiesQueryEl.textContent =
-      `https://api.ebird.org/v2/data/obs/${region}/recent/notable?detail=full&back=30`;
+      `https://api.ebird.org/v2/data/obs/${region}/recent/notable?detail=full&back=${backDays}`;
   }
   if (abaQueryEl) {
     abaQueryEl.textContent =
-      `https://api.ebird.org/v2/data/obs/US/recent/notable?detail=full&back=7 (filtered to Lower 48, ABA≥3; grouped by species+location)`;
+      `https://api.ebird.org/v2/data/obs/US/recent/notable?detail=full&back=${backDays} (filtered to Lower 48, ABA≥3; grouped by species+location)`;
   }
 }
 
 function filterByDays(data) {
   const back = daysInput ? Number(daysInput.value) : 7;
-  const backDays = Number.isFinite(back) ? Math.max(1, Math.min(30, back)) : 7;
+  const backDays = Number.isFinite(back) ? Math.max(1, Math.min(7, back)) : 7;
   const cutoff = Date.now() - backDays * 24 * 60 * 60 * 1000;
   return (Array.isArray(data) ? data : []).filter((item) => {
     const dt = parseObsDate(item?.obsDt);
@@ -1006,19 +1009,20 @@ function renderSightingsTable(data, emptyMessage) {
       const rowId = `notable-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
-          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button>${statusDot}</div></td>
+          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
           <td>${lastReported}</td>
           <td>${firstReported}</td>
           <td>${item.count}</td>
+          <td class="col-status">${statusDot}</td>
           <td class="col-checkbox"><input type="checkbox" class="export-checkbox" data-row-id="${rowId}" checked /></td>
         </tr>
       `;
     })
     .join("");
 
-  sightingsBody.innerHTML = rows || "<tr><td colspan='7'>No results</td></tr>";
+  sightingsBody.innerHTML = rows || "<tr><td colspan='8'>No results</td></tr>";
 }
 
 function renderAbaTable(data, emptyMessage) {
@@ -1147,19 +1151,20 @@ function renderAbaTable(data, emptyMessage) {
       const rowId = `aba-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}">
-          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button>${statusDot}</div></td>
+          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
           <td>${lastReported}</td>
           <td>${firstReported}</td>
           <td>${item.count}</td>
+          <td class="col-status">${statusDot}</td>
           <td class="col-checkbox"><input type="checkbox" class="export-checkbox" data-row-id="${rowId}" checked /></td>
         </tr>
       `;
     })
     .join("");
 
-  abaSightingsBody.innerHTML = rows || "<tr><td colspan='7'>No results</td></tr>";
+  abaSightingsBody.innerHTML = rows || "<tr><td colspan='8'>No results</td></tr>";
 }
 
 function getAbaColor(code) {
@@ -1477,15 +1482,17 @@ function toggleCountySelection(feature, layer) {
 
 async function refreshData() {
   const region = regionSelect.value || DEFAULT_REGION;
-  const back = daysInput.value;
+  const back = Number.isFinite(Number(daysInput?.value))
+    ? Math.max(1, Math.min(7, Number(daysInput.value)))
+    : 7;
   setStatus("Loading data...");
   updateQueryDisplay(region, back);
-  renderSightingsTable([], "<tr><td colspan='7'>Loading county sightings...</td></tr>");
-  renderAbaTable([], "<tr><td colspan='6'>Loading Lower 48 rarities...</td></tr>");
+  renderSightingsTable([], "<tr><td colspan='8'>Loading county sightings...</td></tr>");
+  renderAbaTable([], "<tr><td colspan='8'>Loading Lower 48 rarities...</td></tr>");
 
   try {
     const response = await fetch(
-      `${WORKER_BASE_URL}/api/rarities?region=${encodeURIComponent(region)}&back=30`
+      `${WORKER_BASE_URL}/api/rarities?region=${encodeURIComponent(region)}&back=${back}`
     );
     if (!response.ok) {
       throw new Error("Failed to fetch eBird data.");
@@ -1499,7 +1506,7 @@ async function refreshData() {
     const { countyFiltered, abaFiltered } = applyAllFilters();
     renderSightingsTable(countyFiltered);
     updateUniqueCount(countyFiltered);
-    await refreshAbaData(30, { renderMap: showAbaMap?.checked ?? false });
+    await refreshAbaData(back, { renderMap: showAbaMap?.checked ?? false });
     renderAllMarkers();
     setStatus(`Loaded ${allData.length} sightings.`);
   } catch (error) {
@@ -1568,9 +1575,12 @@ function locateUser() {
 
 async function refreshAbaData(back, options = {}) {
   const renderMap = options.renderMap !== false;
+  const backDays = Number.isFinite(Number(back))
+    ? Math.max(1, Math.min(7, Number(back)))
+    : 7;
   expandedCounties.clear();
   try {
-    const response = await fetch(`${WORKER_BASE_URL}/api/lower48_rarities?minAba=3&back=7`);
+    const response = await fetch(`${WORKER_BASE_URL}/api/lower48_rarities?minAba=3&back=${backDays}`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(errorText || "Failed to fetch Lower 48 data.");
@@ -1599,14 +1609,14 @@ async function refreshAbaData(back, options = {}) {
       const suffix = suffixParts.length ? ` (${suffixParts.join(", ")})` : "";
       renderAbaTable(
         [],
-        `<tr><td colspan='6'>No Lower 48 data returned${suffix}.</td></tr>`
+        `<tr><td colspan='8'>No Lower 48 data returned${suffix}.</td></tr>`
       );
     } else {
       // Render table with filtered data
       renderAbaTable(
         filteredForMap,
         filteredForMap.length === 0
-          ? "<tr><td colspan='6'>No results match current filters (try adjusting Days Back or ABA code slider).</td></tr>"
+          ? "<tr><td colspan='8'>No results match current filters (try adjusting Days Back or ABA code slider).</td></tr>"
           : undefined
       );
     }
@@ -1616,7 +1626,7 @@ async function refreshAbaData(back, options = {}) {
     setStatus(`Lower 48 overlay error: ${message}`);
     renderAbaTable(
       [],
-      `<tr><td colspan='6'>Lower 48 error: ${message}</td></tr>`
+      `<tr><td colspan='8'>Lower 48 error: ${message}</td></tr>`
     );
   }
 }
@@ -1920,6 +1930,7 @@ const debouncedHighResLoad = debounce(loadHighResCounties, 700);
 
 daysInput.addEventListener("input", () => {
   daysValue.textContent = daysInput.value;
+  updateQueryDisplay(regionSelect.value || DEFAULT_REGION, daysInput.value);
   const { countyFiltered, abaFiltered } = applyAllFilters();
   renderSightingsTable(countyFiltered);
   updateUniqueCount(countyFiltered);
@@ -1927,8 +1938,8 @@ daysInput.addEventListener("input", () => {
   renderAbaTable(
     abaFiltered,
     abaData.length
-      ? "<tr><td colspan='6'>No ABA results for current filters.</td></tr>"
-      : "<tr><td colspan='6'>No ABA results returned by eBird.</td></tr>"
+      ? "<tr><td colspan='8'>No ABA results for current filters.</td></tr>"
+      : "<tr><td colspan='8'>No ABA results returned by eBird.</td></tr>"
   );
 });
 regionSelect.addEventListener("change", () => {

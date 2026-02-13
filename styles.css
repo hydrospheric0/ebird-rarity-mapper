@@ -589,6 +589,11 @@ h6 {
   width: 7%;
 }
 
+.sightings-table .col-status {
+  width: 4%;
+  text-align: right;
+}
+
 .sightings-table .col-checkbox {
   width: 5%;
   text-align: center;
@@ -601,6 +606,10 @@ h6 {
 
 .sightings-table th.col-checkbox {
   text-align: center;
+}
+
+.sightings-table th.col-status {
+  text-align: right;
 }
 
 .sightings-table td.col-county,
