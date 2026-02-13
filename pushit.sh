@@ -107,13 +107,20 @@ else
 fi
 
 if [[ "$stage_mode" == "tracked" ]]; then
-  untracked_files="$(git ls-files --others --exclude-standard)"
-  if [[ -n "$untracked_files" ]]; then
+  mapfile -t untracked_files < <(git ls-files --others --exclude-standard)
+  if (( ${#untracked_files[@]} > 0 )); then
+    preview_count=20
+    total_count=${#untracked_files[@]}
     echo "ERROR: Untracked files present while using tracked-only mode." >&2
     echo "These can block pull --rebase if upstream tracks same paths." >&2
     echo "Either run with --all, or stash/remove untracked files first." >&2
-    echo "" >&2
-    echo "$untracked_files" >&2
+    echo "Found $total_count untracked paths. Showing first $preview_count:" >&2
+    for path in "${untracked_files[@]:0:$preview_count}"; do
+      echo "  - $path" >&2
+    done
+    if (( total_count > preview_count )); then
+      echo "  ... and $((total_count - preview_count)) more" >&2
+    fi
     exit 1
   fi
 fi
