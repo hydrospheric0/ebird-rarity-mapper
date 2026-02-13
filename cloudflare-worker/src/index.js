@@ -61,19 +61,37 @@ function isLower48(item) {
 }
 
 // Dedupe species/location
+function isConfirmedRecord(item) {
+  return Number(item?.obsReviewed) === 1 && Number(item?.obsValid) === 1;
+}
+
 function dedupeSpeciesLocation(data) {
   if (!Array.isArray(data)) return data;
-  const seen = new Set();
-  const result = [];
+  const groups = new Map();
   for (const item of data) {
     if (!item || typeof item !== 'object') continue;
     const key = `${item.comName || ''}|${item.locId || ''}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(item);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        ...item,
+        confirmedAny: isConfirmedRecord(item),
+      });
+    } else {
+      const existing = groups.get(key);
+      const nextConfirmed = existing.confirmedAny || isConfirmedRecord(item);
+      existing.confirmedAny = nextConfirmed;
+      if (nextConfirmed) {
+        existing.obsReviewed = 1;
+        existing.obsValid = 1;
+      }
+
+      if (item.obsDt && (!existing.obsDt || item.obsDt > existing.obsDt)) {
+        existing.obsDt = item.obsDt;
+      }
     }
   }
-  return result;
+
+  return Array.from(groups.values());
 }
 
 // Aggregate species/location reports
@@ -90,12 +108,18 @@ function aggregateSpeciesLocationReports(data) {
         ...item,
         reportCount: 1,
         subIds: new Set([item.subId]),
+        confirmedAny: isConfirmedRecord(item),
       });
     } else {
       const existing = groups.get(key);
       if (item.subId && !existing.subIds.has(item.subId)) {
         existing.subIds.add(item.subId);
         existing.reportCount = existing.subIds.size;
+      }
+      existing.confirmedAny = existing.confirmedAny || isConfirmedRecord(item);
+      if (existing.confirmedAny) {
+        existing.obsReviewed = 1;
+        existing.obsValid = 1;
       }
       // Keep most recent date
       if (item.obsDt && (!existing.obsDt || item.obsDt > existing.obsDt)) {

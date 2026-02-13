@@ -649,6 +649,7 @@ function renderAllMarkers() {
 
         const locationLink = locationUrl(item.locId);
         const abaBadge = renderAbaCodeBadge(abaCode);
+        const statusBadge = renderStatusBadge(isConfirmedObservation(item));
         const checklistLink = `<a href="${checklistUrl(item.subId)}" target="_blank" rel="noopener">Checklist</a>`;
         const locationLinkHtml = locationLink
           ? `<a href="${locationLink}" target="_blank" rel="noopener">Location</a>`
@@ -660,6 +661,7 @@ function renderAllMarkers() {
               ${abaBadge}
               <div style="font-weight: 600;">${item.comName}</div>
             </div>
+            <div style="margin-bottom: 4px;">${statusBadge}</div>
             <div style="font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
           </div>
         `;
@@ -876,7 +878,7 @@ function renderSightingsTable(data, emptyMessage) {
 
   if (!Array.isArray(data) || data.length === 0) {
     sightingsBody.innerHTML =
-      emptyMessage || "<tr><td colspan='6'>No results</td></tr>";
+      emptyMessage || "<tr><td colspan='8'>No results</td></tr>";
     return;
   }
 
@@ -903,6 +905,7 @@ function renderSightingsTable(data, emptyMessage) {
         first: date,
         last: date,
         abaCode,
+        confirmedAny: isConfirmedObservation(item),
         lat: Number.isFinite(lat) ? lat : null,
         lng: Number.isFinite(lng) ? lng : null,
         locId: item.locId || null
@@ -926,6 +929,7 @@ function renderSightingsTable(data, emptyMessage) {
     if (!entry.locId && item.locId) {
       entry.locId = item.locId;
     }
+    entry.confirmedAny = entry.confirmedAny || isConfirmedObservation(item);
     if (abaCode !== null) {
       if (entry.abaCode === null || entry.abaCode === undefined) {
         entry.abaCode = abaCode;
@@ -971,14 +975,16 @@ function renderSightingsTable(data, emptyMessage) {
       const firstReported = item.first ? formatDate(item.first) : "";
       const lastReported = item.last ? formatDate(item.last) : "";
       const abaBadge = renderAbaCodeBadge(item.abaCode);
+      const statusBadge = renderStatusBadge(Boolean(item.confirmedAny));
       const countyCell = item.county || "";
       const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${item.state || ""}" data-county="${countyCell}">${countyCell}</button>` : "";
       const rowId = `notable-${index}`;
       return `
-        <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${item.species}" data-county="${item.county || ""}" data-state="${item.state || ""}" data-aba="${item.abaCode ?? ""}" data-locid="${item.locId || ""}" data-last="${lastReported}" data-first="${firstReported}">
+        <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${item.species}" data-county="${item.county || ""}" data-state="${item.state || ""}" data-aba="${item.abaCode ?? ""}" data-locid="${item.locId || ""}" data-last="${lastReported}" data-first="${firstReported}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
           <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${item.species}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${item.species}</button></div></td>
           <td class="col-state">${item.state || ""}</td>
           <td class="col-county">${countyClickable}</td>
+          <td class="col-status">${statusBadge}</td>
           <td>${lastReported}</td>
           <td>${firstReported}</td>
           <td>${item.count}</td>
@@ -988,7 +994,7 @@ function renderSightingsTable(data, emptyMessage) {
     })
     .join("");
 
-  sightingsBody.innerHTML = rows || "<tr><td colspan='7'>No results</td></tr>";
+  sightingsBody.innerHTML = rows || "<tr><td colspan='8'>No results</td></tr>";
 }
 
 function renderAbaTable(data, emptyMessage) {
@@ -1146,6 +1152,19 @@ function renderAbaCodeBadge(code) {
   }
   const safe = Math.round(n);
   return `<span class="aba-code-badge aba-code-${safe}" title="ABA code ${safe}">${safe}</span>`;
+}
+
+function isConfirmedObservation(item) {
+  if (item && typeof item.confirmedAny === "boolean") {
+    return item.confirmedAny;
+  }
+  return Number(item?.obsReviewed) === 1 && Number(item?.obsValid) === 1;
+}
+
+function renderStatusBadge(isConfirmed) {
+  return isConfirmed
+    ? '<span class="status-badge status-confirmed" title="At least one report in this merged group is confirmed">Confirmed</span>'
+    : '<span class="status-badge status-unconfirmed" title="No confirmed report in this merged group">Unconfirmed</span>';
 }
 
 function filterAbaByCode(data) {
@@ -1407,7 +1426,7 @@ async function refreshData() {
   const back = daysInput.value;
   setStatus("Loading data...");
   updateQueryDisplay(region, back);
-  renderSightingsTable([], "<tr><td colspan='6'>Loading county sightings...</td></tr>");
+  renderSightingsTable([], "<tr><td colspan='8'>Loading county sightings...</td></tr>");
   renderAbaTable([], "<tr><td colspan='6'>Loading Lower 48 rarities...</td></tr>");
 
   try {
@@ -1432,7 +1451,7 @@ async function refreshData() {
   } catch (error) {
     console.error(error);
     setStatus(`Error loading data: ${error.message}`);
-    renderSightingsTable([], `<tr><td colspan='6'>Error loading county data: ${String(error.message || error)}</td></tr>`);
+    renderSightingsTable([], `<tr><td colspan='8'>Error loading county data: ${String(error.message || error)}</td></tr>`);
   }
 }
 
