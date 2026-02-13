@@ -713,6 +713,22 @@ function clearAbaMarkers() {
   abaLayer.clearLayers();
 }
 
+function isNotableMapEnabled() {
+  return showCountyMap?.checked ?? true;
+}
+
+function isLower48MapEnabled() {
+  return showAbaMap?.checked ?? true;
+}
+
+function syncObservationLayerVisibility() {
+  const notableEnabled = isNotableMapEnabled();
+  const lower48Enabled = isLower48MapEnabled();
+  setOverlay(notReviewedLayer, notableEnabled);
+  setOverlay(acceptedLayer, notableEnabled);
+  setOverlay(abaLayer, lower48Enabled);
+}
+
 const markerIconCache = new Map();
 
 function getPinIcon(fillColor, strokeColor = "#1f2937") {
@@ -802,8 +818,8 @@ function renderAllMarkers() {
   const highlightMarkers = [];
 
   // Get filtered data from both sources
-  const notableData = (showCountyMap && showCountyMap.checked) ? getFilteredData() : [];
-  const lower48Data = (showAbaMap && showAbaMap.checked) ? getFilteredAbaData() : [];
+  const notableData = isNotableMapEnabled() ? getFilteredData() : [];
+  const lower48Data = isLower48MapEnabled() ? getFilteredAbaData() : [];
 
   // Group all observations by county from both sources
   const countyGroups = new Map();
@@ -1130,6 +1146,8 @@ function renderAllMarkers() {
       marker.setZIndexOffset(1000);
     }
   });
+
+  syncObservationLayerVisibility();
 }
 
 function setBaseLayer(name) {
@@ -2639,9 +2657,7 @@ baseLayerRadios.forEach((radio) => {
 
 if (showCountyMap) {
   showCountyMap.addEventListener("change", () => {
-    const enabled = showCountyMap.checked;
-    setOverlay(notReviewedLayer, enabled);
-    setOverlay(acceptedLayer, enabled);
+    syncObservationLayerVisibility();
     renderAllMarkers();
   });
 }
@@ -2657,8 +2673,8 @@ if (highResCountiesToggle) {
 
 if (showAbaMap) {
   showAbaMap.addEventListener("change", () => {
-    const enabled = showAbaMap.checked;
-    setOverlay(abaLayer, enabled);
+    const enabled = isLower48MapEnabled();
+    syncObservationLayerVisibility();
     if (enabled) {
       refreshAbaData(daysInput.value, { renderMap: true });
     } else {
