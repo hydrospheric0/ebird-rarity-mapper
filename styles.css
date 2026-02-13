@@ -554,7 +554,7 @@ h6 {
 }
 
 .sightings-table .col-species {
-  width: 28%;
+  width: 24%;
 }
 
 .sightings-table .col-location {
@@ -562,15 +562,15 @@ h6 {
 }
 
 .sightings-table .col-state {
-  width: 8%;
+  width: 6%;
 }
 
 .sightings-table .col-county {
-  width: 14%;
+  width: 16%;
 }
 
 .sightings-table .col-date {
-  width: 10%;
+  width: 8%;
 }
 
 .sightings-table .col-reports {
@@ -578,12 +578,8 @@ h6 {
 }
 
 .sightings-table .col-checkbox {
-  width: 6%;
+  width: 5%;
   text-align: center;
-}
-
-.sightings-table .col-status {
-  width: 10%;
 }
 
 .sightings-table .col-checkbox input[type="checkbox"] {
@@ -658,6 +654,22 @@ h6 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.25);
+  flex: 0 0 auto;
+}
+
+.status-dot-confirmed {
+  background: #22c55e;
+}
+
+.status-dot-pending {
+  background: #f97316;
 }
 
 .species-name {

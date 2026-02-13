@@ -1,17 +1,25 @@
 import { getAbaCode, ABA_MAX_CODE } from './aba-codes-data.js';
 
 const EBIRD_API_BASE = 'https://api.ebird.org/v2';
+const TRUSTED_ORIGINS = new Set([
+  'https://hydrospheric0.github.io',
+]);
 
 // CORS configuration
 function isAllowedOrigin(origin) {
   try {
     const u = new URL(origin);
-    if (u.protocol === 'https:' && u.hostname.endsWith('.github.io')) return true;
+    if (u.protocol === 'https:' && TRUSTED_ORIGINS.has(`${u.protocol}//${u.host}`)) return true;
     if (u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) return true;
     return false;
   } catch {
     return false;
   }
+}
+
+function isValidRegionCode(region) {
+  const value = String(region || '').toUpperCase();
+  return value === 'US' || value === 'ABA' || /^US-[A-Z]{2}$/.test(value);
 }
 
 function getAllowedOrigin(request) {
@@ -223,6 +231,9 @@ export default {
       // Route: GET /api/rarities
       if (url.pathname === '/api/rarities') {
         const region = (url.searchParams.get('region') || 'US-CA').toUpperCase();
+        if (!isValidRegionCode(region)) {
+          return jsonResponse(request, 400, { error: 'Invalid region code' });
+        }
         const back = 7;
         
         const ebirdResp = await ebirdFetch(env, `/data/obs/${region}/recent/notable`, {
@@ -288,7 +299,7 @@ export default {
       
     } catch (err) {
       console.error('Worker error:', err);
-      return jsonResponse(request, 502, { error: err.message || 'Internal error' });
+      return jsonResponse(request, 502, { error: 'Upstream request failed' });
     }
   },
 };

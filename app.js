@@ -380,6 +380,19 @@ function parseObsDate(obsDt) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
 function getStateAbbrev(item) {
   const code = String(item?.subnational1Code || "");
   if (!code) {
@@ -400,11 +413,11 @@ function normalizeCountyName(value) {
 }
 
 function checklistUrl(subId) {
-  return `https://www.ebird.org/ebird/view/checklist/${subId}`;
+  return `https://www.ebird.org/ebird/view/checklist/${encodeURIComponent(String(subId || ""))}`;
 }
 
 function locationUrl(locId) {
-  return locId ? `https://www.ebird.org/hotspot/${locId}` : "";
+  return locId ? `https://www.ebird.org/hotspot/${encodeURIComponent(String(locId))}` : "";
 }
 
 function clearMarkers() {
@@ -652,15 +665,17 @@ function renderAllMarkers() {
         const abaBadge = renderAbaCodeBadge(abaCode);
         const statusBadge = renderStatusBadge(isConfirmedObservation(item));
         const checklistLink = `<a href="${checklistUrl(item.subId)}" target="_blank" rel="noopener">Checklist</a>`;
+        const safeSpecies = escapeHtml(item.comName || "");
+        const safeLocName = escapeHtml(item.locName || "");
         const locationLinkHtml = locationLink
           ? `<a href="${locationLink}" target="_blank" rel="noopener">Location</a>`
-          : (item.locName || "");
+          : safeLocName;
         
         const hoverContent = `
           <div style="display: inline-block;">
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
               ${abaBadge}
-              <div style="font-weight: 600;">${item.comName}</div>
+              <div style="font-weight: 600;">${safeSpecies}</div>
             </div>
             <div style="margin-bottom: 4px;">${statusBadge}</div>
             <div style="font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
@@ -670,7 +685,7 @@ function renderAllMarkers() {
         // Show species label if enabled
         if (showSpeciesLabels && showSpeciesLabels.checked) {
           const labelOffset = getLabelOffset(item);
-          marker.bindTooltip(item.comName, {
+          marker.bindTooltip(safeSpecies, {
             permanent: true,
             direction: "right",
             className: "species-label",
@@ -723,15 +738,17 @@ function renderAllMarkers() {
         const locationLink = locationUrl(item.locId);
         const abaBadge = renderAbaCodeBadge(item.abaCode || item.abaRarityCode);
         const checklistLink = `<a href="${checklistUrl(item.subId)}" target="_blank" rel="noopener">Checklist</a>`;
+        const safeSpecies = escapeHtml(item.comName || "");
+        const safeLocName = escapeHtml(item.locName || "");
         const locationLinkHtml = locationLink
           ? `<a href="${locationLink}" target="_blank" rel="noopener">Location</a>`
-          : (item.locName || "");
+          : safeLocName;
         
         const hoverContent = `
           <div style="display: inline-block;">
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
               ${abaBadge}
-              <div style="font-weight: 600;">${item.comName}</div>
+              <div style="font-weight: 600;">${safeSpecies}</div>
             </div>
             <div style="font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
           </div>
@@ -740,7 +757,7 @@ function renderAllMarkers() {
         // Show species label if enabled
         if (showSpeciesLabels && showSpeciesLabels.checked) {
           const labelOffset = getLabelOffset(item);
-          marker.bindTooltip(item.comName, {
+          marker.bindTooltip(safeSpecies, {
             permanent: true,
             direction: "right",
             className: "species-label",
@@ -879,7 +896,7 @@ function renderSightingsTable(data, emptyMessage) {
 
   if (!Array.isArray(data) || data.length === 0) {
     sightingsBody.innerHTML =
-      emptyMessage || "<tr><td colspan='8'>No results</td></tr>";
+      emptyMessage || "<tr><td colspan='7'>No results</td></tr>";
     return;
   }
 
@@ -976,20 +993,22 @@ function renderSightingsTable(data, emptyMessage) {
       const firstReported = item.first ? formatDate(item.first) : "";
       const lastReported = item.last ? formatDate(item.last) : "";
       const abaBadge = renderAbaCodeBadge(item.abaCode);
-      const statusBadge = renderStatusBadge(Boolean(item.confirmedAny));
+      const statusDot = renderStatusDot(Boolean(item.confirmedAny));
       const stateCode = item.state || "";
+      const safeSpecies = escapeHtml(item.species || "");
+      const safeState = escapeHtml(stateCode);
+      const safeCounty = escapeHtml(item.county || "");
       const stateClickable = stateCode
-        ? `<button type="button" class="state-link" data-state="${stateCode}">${stateCode}</button>`
+        ? `<button type="button" class="state-link" data-state="${escapeAttr(stateCode)}">${safeState}</button>`
         : "";
       const countyCell = item.county || "";
-      const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${item.state || ""}" data-county="${countyCell}">${countyCell}</button>` : "";
+      const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${escapeAttr(item.state || "")}" data-county="${escapeAttr(countyCell)}">${safeCounty}</button>` : "";
       const rowId = `notable-${index}`;
       return `
-        <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${item.species}" data-county="${item.county || ""}" data-state="${item.state || ""}" data-aba="${item.abaCode ?? ""}" data-locid="${item.locId || ""}" data-last="${lastReported}" data-first="${firstReported}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
-          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${item.species}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${item.species}</button></div></td>
+        <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
+          <td><div class="species-cell">${abaBadge}${statusDot}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
-          <td class="col-status">${statusBadge}</td>
           <td>${lastReported}</td>
           <td>${firstReported}</td>
           <td>${item.count}</td>
@@ -999,7 +1018,7 @@ function renderSightingsTable(data, emptyMessage) {
     })
     .join("");
 
-  sightingsBody.innerHTML = rows || "<tr><td colspan='8'>No results</td></tr>";
+  sightingsBody.innerHTML = rows || "<tr><td colspan='7'>No results</td></tr>";
 }
 
 function renderAbaTable(data, emptyMessage) {
@@ -1047,6 +1066,7 @@ function renderAbaTable(data, emptyMessage) {
         first: firstDate,
         last: date,
         abaCode,
+        confirmedAny: isConfirmedObservation(item),
         lat: Number.isFinite(lat) ? lat : null,
         lng: Number.isFinite(lng) ? lng : null,
         locId: item.locId || null
@@ -1078,6 +1098,7 @@ function renderAbaTable(data, emptyMessage) {
     if (!entry.locId && item.locId) {
       entry.locId = item.locId;
     }
+    entry.confirmedAny = entry.confirmedAny || isConfirmedObservation(item);
     if (firstDate && (!entry.first || firstDate < entry.first)) {
       entry.first = firstDate;
     }
@@ -1113,16 +1134,20 @@ function renderAbaTable(data, emptyMessage) {
       const firstReported = item.first ? formatDate(item.first) : "";
       const lastReported = item.last ? formatDate(item.last) : "";
       const abaBadge = renderAbaCodeBadge(item.abaCode);
+      const statusDot = renderStatusDot(Boolean(item.confirmedAny));
       const stateCode = item.state || "";
+      const safeSpecies = escapeHtml(item.species || "");
+      const safeState = escapeHtml(stateCode);
+      const safeCounty = escapeHtml(item.county || "");
       const stateClickable = stateCode
-        ? `<button type="button" class="state-link" data-state="${stateCode}">${stateCode}</button>`
+        ? `<button type="button" class="state-link" data-state="${escapeAttr(stateCode)}">${safeState}</button>`
         : "";
       const countyCell = item.county || "";
-      const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${item.state || ""}" data-county="${countyCell}">${countyCell}</button>` : "";
+      const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${escapeAttr(item.state || "")}" data-county="${escapeAttr(countyCell)}">${safeCounty}</button>` : "";
       const rowId = `aba-${index}`;
       return `
-        <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${item.species}" data-county="${item.county || ""}" data-state="${item.state || ""}" data-aba="${item.abaCode ?? ""}" data-locid="${item.locId || ""}" data-last="${lastReported}" data-first="${firstReported}">
-          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${item.species}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${item.species}</button></div></td>
+        <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}">
+          <td><div class="species-cell">${abaBadge}${statusDot}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
           <td>${lastReported}</td>
@@ -1174,6 +1199,12 @@ function renderStatusBadge(isConfirmed) {
   return isConfirmed
     ? '<span class="status-badge status-confirmed" title="At least one report in this merged group is confirmed">Confirmed</span>'
     : '<span class="status-badge status-unconfirmed" title="No confirmed report in this merged group">Pending</span>';
+}
+
+function renderStatusDot(isConfirmed) {
+  const cls = isConfirmed ? "status-dot-confirmed" : "status-dot-pending";
+  const title = isConfirmed ? "Confirmed" : "Pending";
+  return `<span class="status-dot ${cls}" title="${title}" aria-label="${title}"></span>`;
 }
 
 function focusRegionFromStateCode(stateCode) {
@@ -1449,7 +1480,7 @@ async function refreshData() {
   const back = daysInput.value;
   setStatus("Loading data...");
   updateQueryDisplay(region, back);
-  renderSightingsTable([], "<tr><td colspan='8'>Loading county sightings...</td></tr>");
+  renderSightingsTable([], "<tr><td colspan='7'>Loading county sightings...</td></tr>");
   renderAbaTable([], "<tr><td colspan='6'>Loading Lower 48 rarities...</td></tr>");
 
   try {
@@ -1474,7 +1505,7 @@ async function refreshData() {
   } catch (error) {
     console.error(error);
     setStatus(`Error loading data: ${error.message}`);
-    renderSightingsTable([], `<tr><td colspan='8'>Error loading county data: ${String(error.message || error)}</td></tr>`);
+    renderSightingsTable([], `<tr><td colspan='7'>Error loading county data: ${String(error.message || error)}</td></tr>`);
   }
 }
 
