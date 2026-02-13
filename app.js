@@ -1006,7 +1006,7 @@ function renderSightingsTable(data, emptyMessage) {
       const rowId = `notable-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
-          <td><div class="species-cell">${abaBadge}${statusDot}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
+          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button>${statusDot}</div></td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
           <td>${lastReported}</td>
@@ -1147,7 +1147,7 @@ function renderAbaTable(data, emptyMessage) {
       const rowId = `aba-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}">
-          <td><div class="species-cell">${abaBadge}${statusDot}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
+          <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button>${statusDot}</div></td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
           <td>${lastReported}</td>
