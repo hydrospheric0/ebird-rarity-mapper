@@ -106,6 +106,18 @@ else
   git add -u
 fi
 
+if [[ "$stage_mode" == "tracked" ]]; then
+  untracked_files="$(git ls-files --others --exclude-standard)"
+  if [[ -n "$untracked_files" ]]; then
+    echo "ERROR: Untracked files present while using tracked-only mode." >&2
+    echo "These can block pull --rebase if upstream tracks same paths." >&2
+    echo "Either run with --all, or stash/remove untracked files first." >&2
+    echo "" >&2
+    echo "$untracked_files" >&2
+    exit 1
+  fi
+fi
+
 if ! git diff --cached --quiet; then
   git commit -m "$msg"
 else
