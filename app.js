@@ -383,6 +383,68 @@ function parseObsDate(obsDt) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function isSameLocalDay(a, b) {
+  return (
+    a instanceof Date &&
+    b instanceof Date &&
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function dayOffsetFromToday(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const today = startOfLocalDay(new Date());
+  const target = startOfLocalDay(date);
+  return Math.round((today.getTime() - target.getTime()) / 86400000);
+}
+
+function getDateBubbleClass(kind, firstDate, lastDate) {
+  const firstIsToday = isSameLocalDay(firstDate, new Date());
+  const lastIsToday = isSameLocalDay(lastDate, new Date());
+
+  if (firstIsToday && lastIsToday) {
+    return "date-bubble-red";
+  }
+
+  if (kind === "last") {
+    const lastOffset = dayOffsetFromToday(lastDate);
+    if (lastOffset === 0) {
+      return "date-bubble-green";
+    }
+    if (lastOffset === 1) {
+      return "date-bubble-yellow";
+    }
+  }
+
+  if (kind === "first") {
+    const firstOffset = dayOffsetFromToday(firstDate);
+    if (firstOffset === 1) {
+      return "date-bubble-green";
+    }
+  }
+
+  return "";
+}
+
+function renderDateBubble(label, bubbleClass) {
+  const text = String(label || "").trim();
+  if (!text) {
+    return "";
+  }
+  if (!bubbleClass) {
+    return escapeHtml(text);
+  }
+  return `<span class="date-cell"><span class="date-marker ${bubbleClass}" aria-hidden="true"></span><span>${escapeHtml(text)}</span></span>`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -995,6 +1057,14 @@ function renderSightingsTable(data, emptyMessage) {
     .map((item, index) => {
       const firstReported = item.first ? formatDate(item.first) : "";
       const lastReported = item.last ? formatDate(item.last) : "";
+      const firstBubble = renderDateBubble(
+        firstReported,
+        getDateBubbleClass("first", item.first, item.last)
+      );
+      const lastBubble = renderDateBubble(
+        lastReported,
+        getDateBubbleClass("last", item.first, item.last)
+      );
       const abaBadge = renderAbaCodeBadge(item.abaCode);
       const statusDot = renderStatusDot(Boolean(item.confirmedAny));
       const stateCode = item.state || "";
@@ -1010,12 +1080,12 @@ function renderSightingsTable(data, emptyMessage) {
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
           <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
+          <td class="col-status">${statusDot}</td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
-          <td>${lastReported}</td>
-          <td>${firstReported}</td>
+          <td>${lastBubble}</td>
+          <td>${firstBubble}</td>
           <td>${item.count}</td>
-          <td class="col-status">${statusDot}</td>
           <td class="col-checkbox"><input type="checkbox" class="export-checkbox" data-row-id="${rowId}" checked /></td>
         </tr>
       `;
@@ -1032,7 +1102,7 @@ function renderAbaTable(data, emptyMessage) {
 
   if (!Array.isArray(data) || data.length === 0) {
     abaSightingsBody.innerHTML =
-      emptyMessage || "<tr><td colspan='6'>No results</td></tr>";
+      emptyMessage || "<tr><td colspan='8'>No results</td></tr>";
     return;
   }
 
@@ -1137,6 +1207,14 @@ function renderAbaTable(data, emptyMessage) {
     .map((item, index) => {
       const firstReported = item.first ? formatDate(item.first) : "";
       const lastReported = item.last ? formatDate(item.last) : "";
+      const firstBubble = renderDateBubble(
+        firstReported,
+        getDateBubbleClass("first", item.first, item.last)
+      );
+      const lastBubble = renderDateBubble(
+        lastReported,
+        getDateBubbleClass("last", item.first, item.last)
+      );
       const abaBadge = renderAbaCodeBadge(item.abaCode);
       const statusDot = renderStatusDot(Boolean(item.confirmedAny));
       const stateCode = item.state || "";
@@ -1152,12 +1230,12 @@ function renderAbaTable(data, emptyMessage) {
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}">
           <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${escapeAttr(item.species)}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${safeSpecies}</button></div></td>
+          <td class="col-status">${statusDot}</td>
           <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
-          <td>${lastReported}</td>
-          <td>${firstReported}</td>
+          <td>${lastBubble}</td>
+          <td>${firstBubble}</td>
           <td>${item.count}</td>
-          <td class="col-status">${statusDot}</td>
           <td class="col-checkbox"><input type="checkbox" class="export-checkbox" data-row-id="${rowId}" checked /></td>
         </tr>
       `;

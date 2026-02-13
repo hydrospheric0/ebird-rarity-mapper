@@ -591,7 +591,7 @@ h6 {
 
 .sightings-table .col-status {
   width: 4%;
-  text-align: right;
+  text-align: center;
 }
 
 .sightings-table .col-checkbox {
@@ -609,7 +609,7 @@ h6 {
 }
 
 .sightings-table th.col-status {
-  text-align: right;
+  text-align: center;
 }
 
 .sightings-table td.col-county,
@@ -677,8 +677,34 @@ h6 {
   gap: 8px;
 }
 
+.date-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.date-marker {
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.25);
+}
+
+.date-bubble-green {
+  background: #22c55e;
+}
+
+.date-bubble-yellow {
+  background: #facc15;
+}
+
+.date-bubble-red {
+  background: #ef4444;
+}
+
 .status-dot {
-  width: 10px;
+  width: 18px;
   height: 10px;
   border-radius: 999px;
   border: 1px solid rgba(15, 23, 42, 0.25);
