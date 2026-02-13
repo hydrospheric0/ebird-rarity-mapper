@@ -1377,7 +1377,7 @@ async function refreshData() {
 
   try {
     const response = await fetch(
-      `/api/rarities?region=${encodeURIComponent(region)}&back=30`
+      `${WORKER_BASE_URL}/api/rarities?region=${encodeURIComponent(region)}&back=30`
     );
     if (!response.ok) {
       throw new Error("Failed to fetch eBird data.");
