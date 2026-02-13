@@ -44,7 +44,7 @@
                   <div class="control-group">
                     <label for="daysBack">Days Back</label>
                     <div class="range-row">
-                      <input id="daysBack" type="range" min="1" max="7" value="7" />
+                      <input id="daysBack" type="range" min="1" max="14" value="7" />
                       <span id="daysBackValue">7</span>
                     </div>
                   </div>
@@ -86,15 +86,15 @@
                       <th class="col-county">County</th>
                       <th class="col-date">Last</th>
                       <th class="col-date">First</th>
-                      <th class="col-reports">Reports</th>
+                      <th class="col-reports">R</th>
                       <th class="col-checkbox"><input type="checkbox" id="selectAllAba" checked title="Select/deselect all" /></th>
                     </tr>
                   </thead>
                   <tbody id="abaSightingsBody"></tbody>
                 </table>
               </div>
-              <div style="padding: 8px 0; text-align: right;">
-                <button id="googleMapAba" type="button" class="google-map-btn" title="Download KML file to import into Google My Maps">📥 Export to Google Maps</button>
+              <div style="padding: 4px 0 1px; text-align: right;">
+                <button id="googleMapAba" type="button" class="google-map-btn" title="Download KML file to import into Google My Maps" aria-label="Download KML file to import into Google My Maps">⇄</button>
               </div>
             </div>
             <div class="info-block table-block">
@@ -121,15 +121,15 @@
                       <th class="col-county">County</th>
                       <th class="col-date">Last</th>
                       <th class="col-date">First</th>
-                      <th class="col-reports">Reports</th>
+                      <th class="col-reports">R</th>
                       <th class="col-checkbox"><input type="checkbox" id="selectAllNotable" checked title="Select/deselect all" /></th>
                     </tr>
                   </thead>
                   <tbody id="sightingsBody"></tbody>
                 </table>
               </div>
-              <div style="padding: 8px 0; text-align: right;">
-                <button id="googleMapNotable" type="button" class="google-map-btn" title="Download KML file to import into Google My Maps">📥 Export to Google Maps</button>
+              <div style="padding: 4px 0 1px; text-align: right;">
+                <button id="googleMapNotable" type="button" class="google-map-btn" title="Download KML file to import into Google My Maps" aria-label="Download KML file to import into Google My Maps">⇄</button>
               </div>
             </div>
           </div>
@@ -147,7 +147,7 @@
                 alt="Buy Me a Coffee"
               />
             </a>
-            <span class="footerCopyright">(c) Bart Wickel, 2026</span>
+            <span class="footerCopyright">© Bart Wickel, 2026</span>
           </div>
         </aside>
         <main id="map" aria-label="Map">

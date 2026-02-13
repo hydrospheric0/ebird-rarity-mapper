@@ -103,10 +103,10 @@ map.getPane("abaMarkersPane").style.zIndex = 700;
 
 // Ensure tooltips and popups appear above all custom panes
 if (map.getPane("tooltipPane")) {
-  map.getPane("tooltipPane").style.zIndex = 9999;
+  map.getPane("tooltipPane").style.zIndex = 9998;
 }
 if (map.getPane("popupPane")) {
-  map.getPane("popupPane").style.zIndex = 9998;
+  map.getPane("popupPane").style.zIndex = 9999;
 }
 
 const stateBaseStyle = {
@@ -251,6 +251,7 @@ const countyCache = { low: null, high: null };
 let suppressMarkerFitOnce = false;
 let stateFeatureByCode = new Map();
 let selectedCountyName = null;
+let selectedCountyStateCode = null;
 let expandedCounties = new Set();
 
 const STATE_CODE_TO_FIPS = {
@@ -264,16 +265,6 @@ const STATE_CODE_TO_FIPS = {
   WI: "55", WY: "56"
 };
 
-const legend = L.control({ position: "topleft" });
-legend.onAdd = function () {
-  const div = L.DomUtil.create("div", "leaflet-control legend");
-  div.innerHTML =
-    "<div class='legend-title'>Legend</div>" +
-    "<div><span class='legend-swatch lower48'></span>County with Lower 48 rarity</div>" +
-    "<div><span class='legend-swatch notable'></span>County — notable only</div>";
-  return div;
-};
-legend.addTo(map);
 L.control.zoom({ position: "topleft" }).addTo(map);
 
 function setStatus(message) {
@@ -287,6 +278,13 @@ function updateSelectedRegionTitle() {
   if (!selectedRegionTitle || !regionSelect) {
     return;
   }
+  if (selectedCountyName) {
+    const state = selectedCountyStateCode || getSelectedCountyStateAbbrev();
+    selectedRegionTitle.textContent = state
+      ? `${selectedCountyName}, ${state}`
+      : selectedCountyName;
+    return;
+  }
   const option = regionSelect.options?.[regionSelect.selectedIndex];
   const label = option ? option.textContent : (regionSelect.value || DEFAULT_REGION);
   selectedRegionTitle.textContent = label || "Selected Region";
@@ -294,7 +292,7 @@ function updateSelectedRegionTitle() {
 
 function updateQueryDisplay(region, back) {
   const backDays = Number.isFinite(Number(back))
-    ? Math.max(1, Math.min(7, Number(back)))
+    ? Math.max(1, Math.min(14, Number(back)))
     : 7;
   if (raritiesQueryEl) {
     raritiesQueryEl.textContent =
@@ -308,7 +306,7 @@ function updateQueryDisplay(region, back) {
 
 function filterByDays(data) {
   const back = daysInput ? Number(daysInput.value) : 7;
-  const backDays = Number.isFinite(back) ? Math.max(1, Math.min(7, back)) : 7;
+  const backDays = Number.isFinite(back) ? Math.max(1, Math.min(14, back)) : 7;
   const cutoff = Date.now() - backDays * 24 * 60 * 60 * 1000;
   return (Array.isArray(data) ? data : []).filter((item) => {
     const dt = parseObsDate(item?.obsDt);
@@ -321,10 +319,10 @@ function filterByDays(data) {
 
 function applyAllFilters() {
   const countyFiltered = filterBySpecies(
-    filterCountyByCode(applyCountyFilters(filterByDays(allData)))
+    filterCountyByCode(applyCountyFiltersForTable(filterByDays(allData)))
   );
   const abaFiltered = filterBySpecies(
-    filterAbaByCode(filterByDays(abaData))
+    filterAbaByCode(applyCountyFiltersForTable(filterByDays(abaData)))
   );
   return { countyFiltered, abaFiltered };
 }
@@ -407,31 +405,19 @@ function dayOffsetFromToday(date) {
 }
 
 function getDateBubbleClass(kind, firstDate, lastDate) {
-  const firstIsToday = isSameLocalDay(firstDate, new Date());
-  const lastIsToday = isSameLocalDay(lastDate, new Date());
+  const targetDate = kind === "first" ? firstDate : lastDate;
+  const offset = dayOffsetFromToday(targetDate);
 
-  if (firstIsToday && lastIsToday) {
-    return "date-bubble-red";
+  if (offset === 0) {
+    return "date-bubble-green-dark";
   }
-
-  if (kind === "last") {
-    const lastOffset = dayOffsetFromToday(lastDate);
-    if (lastOffset === 0) {
-      return "date-bubble-green";
-    }
-    if (lastOffset === 1) {
-      return "date-bubble-yellow";
-    }
+  if (offset === 1) {
+    return "date-bubble-green-light";
   }
-
-  if (kind === "first") {
-    const firstOffset = dayOffsetFromToday(firstDate);
-    if (firstOffset === 1) {
-      return "date-bubble-green";
-    }
+  if (offset === 2) {
+    return "date-bubble-yellow";
   }
-
-  return "";
+  return "date-bubble-neutral";
 }
 
 function renderDateBubble(label, bubbleClass) {
@@ -439,10 +425,8 @@ function renderDateBubble(label, bubbleClass) {
   if (!text) {
     return "";
   }
-  if (!bubbleClass) {
-    return escapeHtml(text);
-  }
-  return `<span class="date-cell"><span class="date-marker ${bubbleClass}" aria-hidden="true"></span><span>${escapeHtml(text)}</span></span>`;
+  const cls = bubbleClass || "date-bubble-neutral";
+  return `<span class="date-bubble ${cls}">${escapeHtml(text)}</span>`;
 }
 
 function escapeHtml(value) {
@@ -703,16 +687,7 @@ function renderAllMarkers() {
         const locKey = item.locId || item.locName || "";
         const speciesCount = locationSpecies.get(locKey)?.size || 0;
         
-        let insideCounty = true;
-        if (selectedCounty && typeof turf !== "undefined" && selectedCounty.geometry) {
-          try {
-            const point = turf.point([Number(item.lng), Number(item.lat)]);
-            insideCounty = turf.booleanPointInPolygon(point, selectedCounty);
-          } catch (error) {
-            console.error(error);
-            insideCounty = true;
-          }
-        }
+        const insideCounty = isObservationInSelectedCounty(item);
         
         const abaCode = item.abaCode ?? item.abaRarityCode;
         const baseColor = getAbaColor(abaCode);
@@ -779,16 +754,7 @@ function renderAllMarkers() {
           ? String(item.comName || "").toLowerCase() === highlight
           : true;
         
-        let insideCounty = true;
-        if (selectedCounty && typeof turf !== "undefined" && selectedCounty.geometry) {
-          try {
-            const point = turf.point([Number(item.lng), Number(item.lat)]);
-            insideCounty = turf.booleanPointInPolygon(point, selectedCounty);
-          } catch (error) {
-            console.error(error);
-            insideCounty = true;
-          }
-        }
+        const insideCounty = isObservationInSelectedCounty(item);
         
         const abaCode = item.abaCode ?? item.abaRarityCode;
         const baseColor = getAbaColor(abaCode);
@@ -1109,7 +1075,7 @@ function renderAbaTable(data, emptyMessage) {
   // Filter by selected county if one is active
   let filteredData = data;
   if (selectedCounty && selectedCountyName) {
-    filteredData = applyCountyFilters(data);
+    filteredData = applyCountyFiltersForTable(data);
   }
 
   // Group by species+county instead of species+location
@@ -1414,6 +1380,50 @@ function zoomToObservationExtent(items) {
   }
 }
 
+function zoomToSpeciesFromTableClick(button) {
+  if (!(button instanceof HTMLElement)) {
+    return;
+  }
+  const row = button.closest("tr[data-row-id]");
+  const species = button.getAttribute("data-species") || "";
+  const rowState = row?.getAttribute("data-state") || "";
+  const rowCounty = row?.getAttribute("data-county") || "";
+
+  setSpeciesHighlight(species);
+  if (species) {
+    setStatus(`Highlighting ${species} on the map.`);
+  }
+
+  if (rowState && rowCounty) {
+    selectCountyByName(rowState, rowCounty);
+  }
+
+  const countyTarget = normalizeCountyName(rowCounty);
+  const matches = [...getFilteredData(), ...getFilteredAbaData()].filter((item) => {
+    if ((item?.comName || "") !== species) {
+      return false;
+    }
+    if (rowState && getStateAbbrev(item) !== rowState) {
+      return false;
+    }
+    if (countyTarget && normalizeCountyName(getCountyName(item)) !== countyTarget) {
+      return false;
+    }
+    return Number.isFinite(Number(item?.lat)) && Number.isFinite(Number(item?.lng));
+  });
+
+  if (matches.length > 0) {
+    zoomToObservationExtent(matches);
+    return;
+  }
+
+  const lat = Number(button.getAttribute("data-lat"));
+  const lng = Number(button.getAttribute("data-lng"));
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    map.flyTo([lat, lng], 11, { duration: 0.6 });
+  }
+}
+
 
 function updateSpeciesOptions(data) {
   const species = Array.from(new Set(data.map((item) => item.comName))).sort();
@@ -1478,15 +1488,71 @@ function filterByCountyName(data) {
   if (!target) {
     return data;
   }
+  const selectedState = selectedCountyStateCode || getSelectedCountyStateAbbrev();
   return data.filter((item) => {
     const county = normalizeCountyName(getCountyName(item));
-    return county === target;
+    const stateMatches = !selectedState || getStateAbbrev(item) === selectedState;
+    return county === target && stateMatches;
   });
 }
 
+function getSelectedCountyStateAbbrev() {
+  const countyFips = String(selectedCounty?.id || selectedCountyId || "");
+  const stateFips = countyFips.substring(0, 2);
+  if (!stateFips) {
+    return null;
+  }
+  return (
+    Object.keys(STATE_CODE_TO_FIPS).find(
+      (key) => STATE_CODE_TO_FIPS[key] === stateFips
+    ) || null
+  );
+}
+
+function isObservationInSelectedCounty(item) {
+  if (!selectedCounty) {
+    return true;
+  }
+
+  const targetCounty = normalizeCountyName(selectedCountyName);
+  const itemCounty = normalizeCountyName(getCountyName(item));
+  const countyNameMatches = targetCounty && itemCounty === targetCounty;
+
+  const selectedState = getSelectedCountyStateAbbrev();
+  const itemState = getStateAbbrev(item);
+  const stateMatches = !selectedState || itemState === selectedState;
+
+  let insideByGeometry = false;
+  if (
+    typeof turf !== "undefined" &&
+    selectedCounty.geometry &&
+    Number.isFinite(Number(item?.lat)) &&
+    Number.isFinite(Number(item?.lng))
+  ) {
+    try {
+      const point = turf.point([Number(item.lng), Number(item.lat)]);
+      insideByGeometry = turf.booleanPointInPolygon(point, selectedCounty);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  return insideByGeometry || (countyNameMatches && stateMatches);
+}
+
 function applyCountyFilters(data) {
+  if (!selectedCounty) {
+    return data;
+  }
+  return data.filter((item) => isObservationInSelectedCounty(item));
+}
+
+function applyCountyFiltersForTable(data) {
+  if (!selectedCounty) {
+    return data;
+  }
   const spatial = filterByCounty(data);
-  if (selectedCounty && selectedCountyName && spatial.length === 0) {
+  if (selectedCountyName && spatial.length === 0) {
     return filterByCountyName(data);
   }
   return spatial;
@@ -1499,7 +1565,8 @@ function zoomToCountyLayer(layer) {
   try {
     const bounds = layer.getBounds();
     if (bounds && bounds.isValid && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 11 });
+      map.stop();
+      map.fitBounds(bounds, { padding: [72, 72], maxZoom: 10 });
     }
   } catch (error) {
     console.error(error);
@@ -1515,11 +1582,14 @@ function toggleCountySelection(feature, layer) {
     }
     setStatus(`Filtering by county: ${label}`);
     zoomToCountyLayer(layer);
+    selectedCountyStateCode = getSelectedCountyStateAbbrev();
+    updateSelectedRegionTitle();
   } else {
     selectedCounty = feature;
     selectedCountyId = feature.id || feature.properties?.id || null;
     selectedCountyLayer = layer;
     selectedCountyName = feature.properties?.name || feature.id || null;
+    selectedCountyStateCode = getSelectedCountyStateAbbrev();
     countyLayer.setStyle(getCountyStyle);
     const label = feature.properties?.name || feature.id || "Selected county";
     setStatus(`Filtering by county: ${label}`);
@@ -1546,22 +1616,25 @@ function toggleCountySelection(feature, layer) {
         console.error(error);
       }
     }
+    updateSelectedRegionTitle();
   }
   const filtered = getFilteredData();
   const filteredForTable = filterBySpecies(
-    filterCountyByCode(applyCountyFilters(filterByDays(allData)))
+    filterCountyByCode(applyCountyFiltersForTable(filterByDays(allData)))
   );
   renderSightingsTable(filteredForTable);
   updateUniqueCount(filteredForTable);
   renderAllMarkers();
-  const abaFiltered = getFilteredAbaData();
+  const abaFiltered = filterBySpecies(
+    filterAbaByCode(applyCountyFiltersForTable(filterByDays(abaData)))
+  );
   renderAbaTable(abaFiltered);
 }
 
 async function refreshData() {
   const region = regionSelect.value || DEFAULT_REGION;
   const back = Number.isFinite(Number(daysInput?.value))
-    ? Math.max(1, Math.min(7, Number(daysInput.value)))
+    ? Math.max(1, Math.min(14, Number(daysInput.value)))
     : 7;
   setStatus("Loading data...");
   updateQueryDisplay(region, back);
@@ -1654,7 +1727,7 @@ function locateUser() {
 async function refreshAbaData(back, options = {}) {
   const renderMap = options.renderMap !== false;
   const backDays = Number.isFinite(Number(back))
-    ? Math.max(1, Math.min(7, Number(back)))
+    ? Math.max(1, Math.min(14, Number(back)))
     : 7;
   expandedCounties.clear();
   try {
@@ -1871,6 +1944,7 @@ function syncCountySelection() {
   selectedCountyLayer = null;
 
   if (!selectedCountyId) {
+    selectedCountyStateCode = null;
     countyLayer.setStyle(getCountyStyle);
     return;
   }
@@ -1883,6 +1957,7 @@ function syncCountySelection() {
   });
 
   countyLayer.setStyle(getCountyStyle);
+  selectedCountyStateCode = getSelectedCountyStateAbbrev();
 }
 
 function findCountyByName(stateFips, countyName) {
@@ -1927,6 +2002,7 @@ function selectCountyByName(state, countyName) {
   if (selectedCountyLayer !== layer) {
     expandedCounties.clear();
     toggleCountySelection(layer.feature, layer);
+    return;
   }
 
   zoomToCountyLayer(layer);
@@ -1976,10 +2052,10 @@ function zoomToRegion(regionCode) {
     const layer = L.geoJSON(feature);
     const bounds = layer.getBounds();
     if (bounds && bounds.isValid()) {
-      map.fitBounds(bounds.pad(0.1), { maxZoom: 8 });
+      map.fitBounds(bounds.pad(0.1), { maxZoom: 9 });
       map.once("moveend", () => {
         const currentZoom = map.getZoom();
-        map.setZoom(Math.min(currentZoom + 1, 10));
+        map.setZoom(Math.min(currentZoom + 2, 11));
       });
     }
   } catch (error) {
@@ -2020,6 +2096,11 @@ daysInput.addEventListener("input", () => {
       : "<tr><td colspan='8'>No ABA results returned by eBird.</td></tr>"
   );
 });
+
+daysInput.addEventListener("change", () => {
+  refreshData();
+});
+
 regionSelect.addEventListener("change", () => {
   const region = regionSelect.value || DEFAULT_REGION;
   // County polygons are geographic; if the region changes, clear the county
@@ -2029,6 +2110,7 @@ regionSelect.addEventListener("change", () => {
   selectedCountyId = null;
   selectedCountyLayer = null;
   selectedCountyName = null;
+  selectedCountyStateCode = null;
   if (countyLayer) {
     countyLayer.setStyle(getCountyStyle);
   }
@@ -2043,7 +2125,7 @@ regionSelect.addEventListener("change", () => {
 speciesSelect.addEventListener("change", () => {
   const filtered = getFilteredData();
   const filteredForTable = filterBySpecies(
-    filterCountyByCode(applyCountyFilters(filterByDays(allData)))
+    filterCountyByCode(applyCountyFiltersForTable(filterByDays(allData)))
   );
   activeSpeciesHighlight = speciesSelect.value ? speciesSelect.value : null;
   expandedCounties.clear();
@@ -2065,7 +2147,9 @@ speciesSelect.addEventListener("change", () => {
   renderSightingsTable(filteredForTable);
   updateUniqueCount(filteredForTable);
   renderAllMarkers();
-  const abaFiltered = getFilteredAbaData();
+  const abaFiltered = filterBySpecies(
+    filterAbaByCode(applyCountyFiltersForTable(filterByDays(abaData)))
+  );
   renderAbaTable(abaFiltered);
   zoomToObservationExtent(filteredForTable);
 });
@@ -2080,16 +2164,23 @@ clearBtn.addEventListener("click", () => {
   selectedCountyId = null;
   selectedCountyLayer = null;
   selectedCountyName = null;
+  selectedCountyStateCode = null;
   expandedCounties.clear();
   countyLayer.setStyle(getCountyStyle);
   speciesSelect.value = "";
   activeSpeciesHighlight = null;
   const filtered = getFilteredData();
-  renderSightingsTable(filtered);
-  updateUniqueCount(filtered);
+  const filteredForTable = filterBySpecies(
+    filterCountyByCode(applyCountyFiltersForTable(filterByDays(allData)))
+  );
+  renderSightingsTable(filteredForTable);
+  updateUniqueCount(filteredForTable);
   renderAllMarkers();
-  const abaFiltered = getFilteredAbaData();
+  const abaFiltered = filterBySpecies(
+    filterAbaByCode(applyCountyFiltersForTable(filterByDays(abaData)))
+  );
   renderAbaTable(abaFiltered);
+  updateSelectedRegionTitle();
   setStatus("Filters cleared.");
 });
 
@@ -2344,16 +2435,7 @@ if (sightingsBody) {
     if (!button) {
       return;
     }
-    const lat = Number(button.getAttribute("data-lat"));
-    const lng = Number(button.getAttribute("data-lng"));
-    const species = button.getAttribute("data-species") || "";
-    setSpeciesHighlight(species);
-    if (species) {
-      setStatus(`Highlighting ${species} on the map.`);
-    }
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      map.flyTo([lat, lng], 11, { duration: 0.6 });
-    }
+    zoomToSpeciesFromTableClick(button);
   });
 }
 
@@ -2389,16 +2471,7 @@ if (abaSightingsBody) {
     if (!button) {
       return;
     }
-    const lat = Number(button.getAttribute("data-lat"));
-    const lng = Number(button.getAttribute("data-lng"));
-    const species = button.getAttribute("data-species") || "";
-    if (species) {
-      setSpeciesHighlight(species);
-      setStatus(`Highlighting ${species} on the map.`);
-    }
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      map.flyTo([lat, lng], 11, { duration: 0.6 });
-    }
+    zoomToSpeciesFromTableClick(button);
   });
 }
 
@@ -2445,7 +2518,7 @@ if (countyCodeMin && countyCodeValue) {
     countyCodeValue.textContent = countyCodeMin.value;
     const filtered = getFilteredData();
     const filteredForTable = filterBySpecies(
-      filterCountyByCode(applyCountyFilters(filterByDays(allData)))
+      filterCountyByCode(applyCountyFiltersForTable(filterByDays(allData)))
     );
     renderSightingsTable(filteredForTable);
     updateUniqueCount(filteredForTable);

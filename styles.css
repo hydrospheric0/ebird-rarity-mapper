@@ -15,6 +15,10 @@
   box-sizing: border-box;
 }
 
+html {
+  font-size: clamp(14px, 0.35vw + 12px, 18px);
+}
+
 body {
   margin: 0;
   font-family: "Poppins", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
@@ -45,14 +49,14 @@ h6 {
 .topbar {
   width: 100%;
   box-sizing: border-box;
-  height: 80px;
-  padding: 0 24px;
+  min-height: 4.375rem;
+  padding: 0 1.25rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(15, 23, 42, 0.25);
   font-weight: 700;
-  font-size: 28px;
+  font-size: 1.75rem;
   line-height: 1.15;
   background: var(--header-bg);
   color: #f8fafc;
@@ -60,14 +64,14 @@ h6 {
 }
 
 .topbarTitle {
-  padding-right: 10px;
+  padding-right: 0.625rem;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0.375rem;
 }
 
 .appTitle {
-  font-size: 32px;
+  font-size: 1.875rem;
   line-height: 1.15;
   font-weight: 400;
   cursor: pointer;
@@ -89,21 +93,21 @@ h6 {
 }
 .map-controls {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 1rem;
+  right: 1rem;
   z-index: 1000;
-  width: 260px;
-  max-height: calc(100% - 32px);
+  width: clamp(14rem, 18vw, 18rem);
+  max-height: calc(100% - 2rem);
   overflow: auto;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
   background: #ffffff;
   border: 1px solid var(--panel-border);
   box-shadow: var(--panel-shadow);
 }
 
 .map-controls h2 {
-  margin: 0 0 10px;
+  margin: 0 0 0.625rem;
   font-size: 1rem;
   color: var(--text);
 }
@@ -136,7 +140,7 @@ h6 {
 }
 
 .county-label-text {
-  padding: 4px 10px;
+  padding: 0.25rem 0.625rem;
   border-radius: 999px;
   background: rgba(55, 65, 81, 0.95);
   color: #ffffff;
@@ -160,7 +164,7 @@ h6 {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 20px 22px 0;
+  padding: 0.625rem 1.125rem 0;
   color: var(--text);
   display: flex;
   flex-direction: column;
@@ -177,13 +181,13 @@ h6 {
 
 .panel-footer {
   margin-top: auto;
-  padding: 12px 22px 18px;
+  padding: 0.75rem 1.375rem 1.125rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: var(--header-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .panel-intro {
@@ -198,7 +202,7 @@ h6 {
 }
 
 .bmcButton {
-  height: 44px;
+  height: 2.75rem;
   width: auto;
   display: block;
 }
@@ -212,9 +216,9 @@ h6 {
 }
 
 .controls {
-  margin-top: 20px;
+  margin-top: 1.25rem;
   display: grid;
-  gap: 16px;
+  gap: 1rem;
 }
 
 .controls-block {
@@ -222,7 +226,7 @@ h6 {
 }
 
 .controls-compact {
-  gap: 10px;
+  gap: 0.625rem;
   margin-top: 0;
 }
 
@@ -232,8 +236,8 @@ h6 {
 }
 
 .controls-compact .control-group select {
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
   font-size: 0.9rem;
 }
 
@@ -242,27 +246,27 @@ h6 {
 }
 
 .controls-compact .control-actions button {
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
   font-size: 0.9rem;
 }
 
 .select-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .slider-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .control-group label {
   display: block;
   font-size: 0.95rem;
-  margin-bottom: 6px;
+  margin-bottom: 0.375rem;
   color: var(--text);
 }
 
@@ -285,8 +289,8 @@ h6 {
 }
 
 .control-group select {
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
   border: 1px solid rgba(15, 23, 42, 0.2);
   background: #ffffff;
   color: var(--text);
@@ -295,11 +299,11 @@ h6 {
 .range-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .range-row span {
-  min-width: 24px;
+  min-width: 1.5rem;
   text-align: center;
   color: var(--accent-teal);
   font-weight: 600;
@@ -307,14 +311,14 @@ h6 {
 
 .control-actions {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
 .control-actions button {
-  flex: 1 1 140px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  flex: 1 1 8.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
   border: 1px solid rgba(15, 23, 42, 0.2);
   background: #f1f5f9;
   color: var(--text);
@@ -365,8 +369,8 @@ h6 {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: #f8fafc;
 }
@@ -383,13 +387,17 @@ h6 {
 }
 
 .info-block {
-  margin-top: 24px;
-  padding: 16px;
-  border-radius: 12px;
+  margin-top: 12px;
+  padding: 1rem;
+  border-radius: 0.75rem;
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
   color: var(--text);
+}
+
+.panel-content .info-block:first-child {
+  margin-top: 6px;
 }
 
 .info-block.table-block {
@@ -409,21 +417,21 @@ h6 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 0.75rem;
   margin-bottom: 8px;
 }
 
 .table-filters {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 0.875rem;
   flex: 0 0 auto;
 }
 
 .table-slider {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   color: var(--muted);
   font-size: 0.85rem;
 }
@@ -435,7 +443,7 @@ h6 {
 }
 
 .table-slider input[type="range"] {
-  width: 120px;
+  width: 7.5rem;
 }
 
 .table-slider span {
@@ -452,24 +460,24 @@ h6 {
 .table-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   font-size: 0.85rem;
   color: var(--muted);
 }
 
 .table-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   accent-color: var(--accent-teal);
 }
 
 .google-map-btn {
-  padding: 6px 16px;
+  padding: 0.25rem 0.625rem;
   background: #4285f4;
   color: #ffffff;
   border: none;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  border-radius: 0.25rem;
+  font-size: 0.74rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
@@ -542,15 +550,16 @@ h6 {
 .sightings-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   table-layout: fixed;
 }
 
 .sightings-table th,
 .sightings-table td {
   text-align: left;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  vertical-align: middle;
 }
 
 .sightings-table th {
@@ -566,7 +575,7 @@ h6 {
 }
 
 .sightings-table .col-species {
-  width: 24%;
+  width: 30%;
 }
 
 .sightings-table .col-location {
@@ -574,29 +583,38 @@ h6 {
 }
 
 .sightings-table .col-state {
-  width: 6%;
+  width: 7%;
+  text-align: left;
 }
 
 .sightings-table .col-county {
-  width: 16%;
+  width: 15%;
 }
 
 .sightings-table .col-date {
-  width: 8%;
+  width: 7%;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .sightings-table .col-reports {
-  width: 7%;
+  width: 3%;
+  text-align: left;
 }
 
 .sightings-table .col-status {
-  width: 4%;
-  text-align: center;
+  width: 3%;
+  text-align: left;
+}
+
+.sightings-table td.col-status {
+  position: relative;
+  padding: 0 8px;
 }
 
 .sightings-table .col-checkbox {
   width: 5%;
-  text-align: center;
+  text-align: left;
 }
 
 .sightings-table .col-checkbox input[type="checkbox"] {
@@ -605,11 +623,17 @@ h6 {
 }
 
 .sightings-table th.col-checkbox {
-  text-align: center;
+  text-align: left;
 }
 
 .sightings-table th.col-status {
-  text-align: center;
+  text-align: left;
+}
+
+.sightings-table th.col-state,
+.sightings-table th.col-date,
+.sightings-table th.col-reports {
+  text-align: left;
 }
 
 .sightings-table td.col-county,
@@ -617,6 +641,11 @@ h6 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sightings-table td,
+.sightings-table th {
+  white-space: nowrap;
 }
 
 .sightings-table td a {
@@ -675,38 +704,54 @@ h6 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
-.date-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.date-marker {
+.date-bubble {
   display: inline-block;
-  width: 18px;
-  height: 10px;
+  padding: 1px 8px;
   border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.35;
   border: 1px solid rgba(15, 23, 42, 0.25);
 }
 
-.date-bubble-green {
-  background: #22c55e;
+.date-bubble-neutral {
+  background: rgba(226, 232, 240, 0.42);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #1f2937;
+}
+
+.date-bubble-green-dark {
+  background: #67AD6A;
+  border-color: #67AD6A;
+  color: #ffffff;
+}
+
+.date-bubble-green-light {
+  background: #8DDF97;
+  border-color: #8DDF97;
+  color: #14532d;
 }
 
 .date-bubble-yellow {
-  background: #facc15;
-}
-
-.date-bubble-red {
-  background: #ef4444;
+  background: rgba(254, 249, 195, 0.52);
+  border-color: rgba(250, 204, 21, 0.35);
+  color: #713f12;
 }
 
 .status-dot {
-  width: 18px;
-  height: 10px;
-  border-radius: 999px;
+  display: inline-block;
+  width: 6px;
+  height: 18px;
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 2px;
   border: 1px solid rgba(15, 23, 42, 0.25);
   flex: 0 0 auto;
 }
@@ -732,6 +777,12 @@ h6 {
   font: inherit;
   cursor: pointer;
   text-align: left;
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .species-link:hover {
@@ -854,15 +905,15 @@ h6 {
 
 /* Ensure tooltips and popups appear above all markers */
 .leaflet-tooltip-pane {
-  z-index: 9999 !important;
-}
-
-.leaflet-popup-pane {
   z-index: 9998 !important;
 }
 
-.leaflet-tooltip {
+.leaflet-popup-pane {
   z-index: 9999 !important;
+}
+
+.leaflet-tooltip {
+  z-index: 9998 !important;
 }
 
 .species-label {
@@ -882,5 +933,5 @@ h6 {
 }
 
 .leaflet-popup {
-  z-index: 9998 !important;
+  z-index: 9999 !important;
 }

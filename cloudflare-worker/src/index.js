@@ -234,7 +234,7 @@ export default {
         if (!isValidRegionCode(region)) {
           return jsonResponse(request, 400, { error: 'Invalid region code' });
         }
-        const back = 7;
+        const back = Math.max(1, Math.min(14, parseInt(url.searchParams.get('back') || '7', 10) || 7));
         
         const ebirdResp = await ebirdFetch(env, `/data/obs/${region}/recent/notable`, {
           detail: 'full',
