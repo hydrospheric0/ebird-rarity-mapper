@@ -52,10 +52,6 @@ h6 {
   justify-content: space-between;
   border-bottom: 1px solid rgba(15, 23, 42, 0.25);
   font-weight: 700;
-
-.sightings-table .col-status {
-  width: 104px;
-}
   font-size: 28px;
   line-height: 1.15;
   background: var(--header-bg);
@@ -74,6 +70,8 @@ h6 {
   font-size: 32px;
   line-height: 1.15;
   font-weight: 400;
+  cursor: pointer;
+  user-select: none;
 }
 
 .appBody {
@@ -556,7 +554,7 @@ h6 {
 }
 
 .sightings-table .col-species {
-  width: 24%;
+  width: 28%;
 }
 
 .sightings-table .col-location {
@@ -564,15 +562,15 @@ h6 {
 }
 
 .sightings-table .col-state {
-  width: 6%;
+  width: 8%;
 }
 
 .sightings-table .col-county {
-  width: 16%;
+  width: 14%;
 }
 
 .sightings-table .col-date {
-  width: 8%;
+  width: 10%;
 }
 
 .sightings-table .col-reports {
@@ -580,8 +578,12 @@ h6 {
 }
 
 .sightings-table .col-checkbox {
-  width: 5%;
+  width: 6%;
   text-align: center;
+}
+
+.sightings-table .col-status {
+  width: 10%;
 }
 
 .sightings-table .col-checkbox input[type="checkbox"] {
@@ -689,6 +691,21 @@ h6 {
 }
 
 .county-link:hover {
+  text-decoration: underline;
+}
+
+.state-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.state-link:hover {
   text-decoration: underline;
 }
 

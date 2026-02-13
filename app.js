@@ -236,6 +236,7 @@ const countyCodeMin = document.getElementById("countyCodeMin");
 const countyCodeValue = document.getElementById("countyCodeValue");
 const highResCountiesToggle = document.getElementById("highResCounties");
 const selectedRegionTitle = document.getElementById("selectedRegionTitle");
+const appTitleHome = document.getElementById("appTitleHome");
 
 const DEFAULT_REGION = "US-CA";
 let allData = [];
@@ -976,13 +977,17 @@ function renderSightingsTable(data, emptyMessage) {
       const lastReported = item.last ? formatDate(item.last) : "";
       const abaBadge = renderAbaCodeBadge(item.abaCode);
       const statusBadge = renderStatusBadge(Boolean(item.confirmedAny));
+      const stateCode = item.state || "";
+      const stateClickable = stateCode
+        ? `<button type="button" class="state-link" data-state="${stateCode}">${stateCode}</button>`
+        : "";
       const countyCell = item.county || "";
       const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${item.state || ""}" data-county="${countyCell}">${countyCell}</button>` : "";
       const rowId = `notable-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${item.species}" data-county="${item.county || ""}" data-state="${item.state || ""}" data-aba="${item.abaCode ?? ""}" data-locid="${item.locId || ""}" data-last="${lastReported}" data-first="${firstReported}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
           <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${item.species}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${item.species}</button></div></td>
-          <td class="col-state">${item.state || ""}</td>
+          <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
           <td class="col-status">${statusBadge}</td>
           <td>${lastReported}</td>
@@ -1108,13 +1113,17 @@ function renderAbaTable(data, emptyMessage) {
       const firstReported = item.first ? formatDate(item.first) : "";
       const lastReported = item.last ? formatDate(item.last) : "";
       const abaBadge = renderAbaCodeBadge(item.abaCode);
+      const stateCode = item.state || "";
+      const stateClickable = stateCode
+        ? `<button type="button" class="state-link" data-state="${stateCode}">${stateCode}</button>`
+        : "";
       const countyCell = item.county || "";
       const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${item.state || ""}" data-county="${countyCell}">${countyCell}</button>` : "";
       const rowId = `aba-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${item.species}" data-county="${item.county || ""}" data-state="${item.state || ""}" data-aba="${item.abaCode ?? ""}" data-locid="${item.locId || ""}" data-last="${lastReported}" data-first="${firstReported}">
           <td><div class="species-cell">${abaBadge}<button type="button" class="species-link" data-species="${item.species}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}">${item.species}</button></div></td>
-          <td class="col-state">${item.state || ""}</td>
+          <td class="col-state">${stateClickable}</td>
           <td class="col-county">${countyClickable}</td>
           <td>${lastReported}</td>
           <td>${firstReported}</td>
@@ -1164,7 +1173,23 @@ function isConfirmedObservation(item) {
 function renderStatusBadge(isConfirmed) {
   return isConfirmed
     ? '<span class="status-badge status-confirmed" title="At least one report in this merged group is confirmed">Confirmed</span>'
-    : '<span class="status-badge status-unconfirmed" title="No confirmed report in this merged group">Unconfirmed</span>';
+    : '<span class="status-badge status-unconfirmed" title="No confirmed report in this merged group">Pending</span>';
+}
+
+function focusRegionFromStateCode(stateCode) {
+  const state = String(stateCode || "").toUpperCase().trim();
+  if (!state || !/^[A-Z]{2}$/.test(state)) {
+    return;
+  }
+  const regionCode = `US-${state}`;
+  const options = Array.from(regionSelect?.options || []);
+  const hasRegion = options.some((opt) => opt.value === regionCode);
+  if (!hasRegion) {
+    setStatus(`State not available in regions list: ${state}`);
+    return;
+  }
+  regionSelect.value = regionCode;
+  regionSelect.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function filterAbaByCode(data) {
@@ -1922,7 +1947,12 @@ speciesSelect.addEventListener("change", () => {
   renderAbaTable(abaFiltered);
   zoomToObservationExtent(filteredForTable);
 });
-refreshBtn.addEventListener("click", refreshData);
+refreshBtn.addEventListener("click", () => {
+  const region = regionSelect.value || DEFAULT_REGION;
+  suppressMarkerFitOnce = true;
+  zoomToRegion(region);
+  refreshData();
+});
 clearBtn.addEventListener("click", () => {
   selectedCounty = null;
   selectedCountyId = null;
@@ -2141,6 +2171,19 @@ if (showSpeciesLabels) {
   });
 }
 
+if (appTitleHome) {
+  const reloadPage = () => {
+    window.location.reload();
+  };
+  appTitleHome.addEventListener("click", reloadPage);
+  appTitleHome.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      reloadPage();
+    }
+  });
+}
+
 if (showSpeciesLabels) {
   showSpeciesLabels.addEventListener("change", () => {
     renderAllMarkers();
@@ -2151,6 +2194,15 @@ if (sightingsBody) {
   sightingsBody.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const stateButton = target.closest(".state-link");
+    if (stateButton) {
+      const state = stateButton.getAttribute("data-state");
+      if (state) {
+        focusRegionFromStateCode(state);
+      }
       return;
     }
     
@@ -2187,6 +2239,15 @@ if (abaSightingsBody) {
   abaSightingsBody.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const stateButton = target.closest(".state-link");
+    if (stateButton) {
+      const state = stateButton.getAttribute("data-state");
+      if (state) {
+        focusRegionFromStateCode(state);
+      }
       return;
     }
     
