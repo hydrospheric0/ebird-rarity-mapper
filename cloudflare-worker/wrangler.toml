@@ -1,0 +1,9 @@
+name = "ebird-rarity-mapper"
+main = "src/index.js"
+compatibility_date = "2025-01-23"
+
+# Secrets (set via: wrangler secret put EBIRD_API_KEY)
+# - EBIRD_API_KEY: Your eBird API key
+
+[observability]
+enabled = true

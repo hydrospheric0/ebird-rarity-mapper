@@ -1,0 +1,17 @@
+{
+  "name": "ebird-rarity-mapper-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker backend for eBird Rarity Mapper",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "keywords": ["cloudflare-worker", "ebird", "api"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.56.0"
+  }
+}
