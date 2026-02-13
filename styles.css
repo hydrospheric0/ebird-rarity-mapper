@@ -180,6 +180,10 @@ h6 {
   padding: 12px 22px 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: var(--header-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .panel-intro {
@@ -197,6 +201,14 @@ h6 {
   height: 44px;
   width: auto;
   display: block;
+}
+
+.footerCopyright {
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: right;
+  margin-left: auto;
 }
 
 .controls {
