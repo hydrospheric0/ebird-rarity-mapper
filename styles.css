@@ -79,14 +79,43 @@ h6 {
 }
 
 .appBody {
+  --panel-width: 35%;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 35% 65%;
+  grid-template-columns: var(--panel-width) 0.5rem minmax(0, 1fr);
   background: #e5e7eb;
 }
 
+.panel-resizer {
+  cursor: col-resize;
+  position: relative;
+  background: transparent;
+}
+
+.panel-resizer::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.12);
+}
+
+.panel-resizer:hover::before,
+.panel-resizer:focus-visible::before,
+.panel-resizer.is-dragging::before {
+  background: rgba(15, 23, 42, 0.32);
+}
+
+.panel-resizer:focus-visible {
+  outline: none;
+}
+
 #map {
+  min-width: 0;
   min-height: 0;
   height: 100%;
   position: relative;
@@ -114,6 +143,24 @@ h6 {
 
 .map-controls .layer-group label {
   color: var(--muted);
+}
+
+.debug-size-badge {
+  position: fixed;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 11000;
+  padding: 0.28rem 0.5rem;
+  border-radius: 0.35rem;
+  background: rgba(15, 23, 42, 0.88);
+  color: #f8fafc;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  pointer-events: none;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.24);
+  white-space: nowrap;
 }
 
 .leaflet-container {
@@ -153,6 +200,7 @@ h6 {
 
 
 .panel {
+  min-width: 0;
   background: #e5e7eb;
   border-right: 1px solid var(--panel-border);
   display: flex;
@@ -164,7 +212,7 @@ h6 {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0.625rem 1.125rem 0;
+  padding: 0.625rem 1.125rem 0.75rem;
   color: var(--text);
   display: flex;
   flex-direction: column;
@@ -179,15 +227,15 @@ h6 {
 }
 
 
-.panel-footer {
-  margin-top: auto;
-  padding: 0.75rem 1.375rem 1.125rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: #222;
+.support-card {
+  margin: 0 1.125rem 0.625rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  flex: 0 0 auto;
+  background: #222;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .panel-intro {
@@ -396,15 +444,32 @@ h6 {
   color: var(--text);
 }
 
+.info-block.support-card {
+  background: #222;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
 .panel-content .info-block:first-child {
   margin-top: 6px;
 }
 
 .info-block.table-block {
   flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.info-block.table-block.table-empty {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
+.info-block.table-block.table-compact {
+  flex: 0 0 auto;
+  min-height: auto;
 }
 
 .info-block h2 {
@@ -541,10 +606,19 @@ h6 {
 
 .table-wrap {
   flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
   border-radius: 10px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   max-height: none;
+}
+
+.info-block.table-block.table-empty .table-wrap,
+.info-block.table-block.table-compact .table-wrap {
+  flex: 0 0 auto;
+  min-height: auto;
+  max-height: min(44vh, 24rem);
 }
 
 .sightings-table {
@@ -575,7 +649,7 @@ h6 {
 }
 
 .sightings-table .col-species {
-  width: 30%;
+  width: 39%;
 }
 
 .sightings-table .col-location {
@@ -583,27 +657,27 @@ h6 {
 }
 
 .sightings-table .col-state {
-  width: 7%;
+  width: 2rem;
   text-align: left;
 }
 
 .sightings-table .col-county {
-  width: 15%;
+  width: 7.2rem;
 }
 
 .sightings-table .col-date {
-  width: 7%;
+  width: 3.25rem;
   text-align: left;
   white-space: nowrap;
 }
 
 .sightings-table .col-reports {
-  width: 3%;
+  width: 1.55rem;
   text-align: left;
 }
 
 .sightings-table .col-status {
-  width: 3%;
+  width: 1.2rem;
   text-align: left;
 }
 
@@ -613,8 +687,29 @@ h6 {
 }
 
 .sightings-table .col-checkbox {
-  width: 5%;
+  width: 1.65rem;
   text-align: left;
+}
+
+.sightings-table .col-map {
+  width: 1.65rem;
+  text-align: center;
+}
+
+.sightings-table td.col-state,
+.sightings-table th.col-state,
+.sightings-table td.col-date,
+.sightings-table th.col-date,
+.sightings-table td.col-reports,
+.sightings-table th.col-reports,
+.sightings-table td.col-checkbox,
+.sightings-table th.col-checkbox,
+.sightings-table td.col-map,
+.sightings-table th.col-map,
+.sightings-table td.col-status,
+.sightings-table th.col-status {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .sightings-table .col-checkbox input[type="checkbox"] {
@@ -634,6 +729,37 @@ h6 {
 .sightings-table th.col-date,
 .sightings-table th.col-reports {
   text-align: left;
+}
+
+.sightings-table th.col-map,
+.sightings-table td.col-map {
+  text-align: center;
+}
+
+.table-export-row {
+  padding: 4px 0 1px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.row-map-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.row-map-btn:hover {
+  color: var(--text);
+}
+
+.row-map-btn:focus-visible {
+  outline: 2px solid rgba(66, 133, 244, 0.55);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .sightings-table td.col-county,
@@ -880,10 +1006,38 @@ h6 {
   background: #4b5563;
 }
 
+@media (min-width: 901px) and (max-width: 1280px) {
+  .map-controls {
+    width: clamp(13rem, 20vw, 16rem);
+  }
+
+  .sightings-table {
+    font-size: 0.8rem;
+  }
+
+  .sightings-table th,
+  .sightings-table td {
+    padding: 5px 7px;
+  }
+}
+
+@media (min-width: 1281px) and (max-width: 1800px) {
+}
+
+@media (min-width: 1801px) {
+  .map-controls {
+    width: clamp(15rem, 16vw, 19rem);
+  }
+}
+
 @media (max-width: 900px) {
   .appBody {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(50vh, 60vh) auto;
+  }
+
+  .panel-resizer {
+    display: none;
   }
 
   #map {

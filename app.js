@@ -92,7 +92,7 @@ map.getPane("statesPane").style.zIndex = 470;
 map.getPane("statesPane").style.pointerEvents = "none";
 map.createPane("highResCountiesPane");
 map.getPane("highResCountiesPane").style.zIndex = 480;
-map.getPane("highResCountiesPane").style.pointerEvents = "auto";
+map.getPane("highResCountiesPane").style.pointerEvents = "none";
 map.createPane("countyLabelPane");
 map.getPane("countyLabelPane").style.zIndex = 900;
 map.getPane("countyLabelPane").style.pointerEvents = "none";
@@ -148,19 +148,52 @@ const highResCountyLayer = L.geoJSON(null, {
 });
 
 const countyLabelLayer = L.layerGroup().addTo(map);
+const HIGH_RES_VISUAL_MIN_ZOOM = 8;
+let highResCountyTilesLayer = null;
+let highResCountyTilesReady = false;
+
+function shouldUseHighResCountyVisual() {
+  return map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM && highResCountyTilesReady;
+}
+
+function buildHighResCountyTiles(geojson) {
+  if (!geojson || !L.vectorGrid || typeof L.vectorGrid.slicer !== "function") {
+    return;
+  }
+  if (highResCountyTilesLayer) {
+    setOverlay(highResCountyTilesLayer, false);
+  }
+  highResCountyTilesLayer = L.vectorGrid.slicer(geojson, {
+    pane: "highResCountiesPane",
+    rendererFactory: L.canvas.tile,
+    vectorTileLayerStyles: {
+      sliced: {
+        color: "#111827",
+        weight: 1.15,
+        opacity: 0.85,
+        fill: false,
+        fillOpacity: 0
+      }
+    },
+    interactive: false,
+    maxZoom: 22,
+    tolerance: 3
+  });
+  highResCountyTilesReady = true;
+}
 
 function ensureBoundaryVisibility() {
-  const useHighRes = highResCountiesToggle && highResCountiesToggle.checked;
-  const hasHighRes =
-    highResCountyLayer && highResCountyLayer.getLayers().length > 0;
-  const showHighRes = useHighRes && hasHighRes;
+  const countyEnabled = showCountyMap?.checked ?? true;
+  const showHighResVisual = countyEnabled && shouldUseHighResCountyVisual();
   setOverlay(stateLayer, true);
-  setOverlay(countyLayer, !showHighRes);
-  setOverlay(highResCountyLayer, showHighRes);
-  if (showHighRes) {
-    highResCountyLayer.bringToFront();
-  } else {
-    countyLayer.bringToFront();
+  setOverlay(countyLayer, countyEnabled);
+  setOverlay(highResCountyLayer, false);
+  if (highResCountyTilesLayer) {
+    setOverlay(highResCountyTilesLayer, showHighResVisual);
+  }
+  countyLayer.bringToFront();
+  if (showHighResVisual && highResCountyTilesLayer) {
+    highResCountyTilesLayer.bringToFront();
   }
   stateLayer.bringToFront();
   if (selectedCountyLayer) {
@@ -171,19 +204,27 @@ function ensureBoundaryVisibility() {
 function applyBoundaryStyles() {
   stateLayer.setStyle(stateBaseStyle);
   countyLayer.setStyle(getCountyStyle);
-  highResCountyLayer.setStyle(getCountyStyle);
 }
 
 function getCountyStyle(feature) {
   const id = feature?.id || feature?.properties?.id || null;
   const isSelected = selectedCountyId && id && id === selectedCountyId;
+  const useHighResVisual = shouldUseHighResCountyVisual();
   if (isSelected) {
     return {
       ...countyBaseStyle,
       color: "#ef4444",
-      weight: 1.8,
+      weight: useHighResVisual ? 2.2 : 1.8,
       opacity: 1,
-      fillOpacity: 0.08
+      fillOpacity: useHighResVisual ? 0.03 : 0.08
+    };
+  }
+  if (useHighResVisual) {
+    return {
+      ...countyBaseStyle,
+      opacity: 0,
+      fillOpacity: 0,
+      weight: 8
     };
   }
   return { ...countyBaseStyle };
@@ -237,6 +278,10 @@ const countyCodeValue = document.getElementById("countyCodeValue");
 const highResCountiesToggle = document.getElementById("highResCounties");
 const selectedRegionTitle = document.getElementById("selectedRegionTitle");
 const appTitleHome = document.getElementById("appTitleHome");
+const appBody = document.querySelector(".appBody");
+const panelResizer = document.getElementById("panelResizer");
+const DEBUG_BADGE_STORAGE_KEY = "ebirdDebugSizeBadge";
+const PANEL_WIDTH_STORAGE_KEY = "ebirdPanelWidthPercent";
 
 const DEFAULT_REGION = "US-CA";
 let allData = [];
@@ -253,6 +298,8 @@ let stateFeatureByCode = new Map();
 let selectedCountyName = null;
 let selectedCountyStateCode = null;
 let expandedCounties = new Set();
+let debugSizeBadgeEl = null;
+let tableLayoutFrame = null;
 
 const STATE_CODE_TO_FIPS = {
   AL: "01", AK: "02", AZ: "04", AR: "05", CA: "06", CO: "08", CT: "09",
@@ -272,6 +319,176 @@ function setStatus(message) {
     return;
   }
   statusEl.textContent = message;
+}
+
+function clampPanelWidth(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return 35;
+  }
+  return Math.max(24, Math.min(55, n));
+}
+
+function applyPanelWidth(widthPercent) {
+  if (!appBody) {
+    return;
+  }
+  const clamped = clampPanelWidth(widthPercent);
+  appBody.style.setProperty("--panel-width", `${clamped}%`);
+  if (panelResizer) {
+    panelResizer.setAttribute("aria-valuemin", "24");
+    panelResizer.setAttribute("aria-valuemax", "55");
+    panelResizer.setAttribute("aria-valuenow", String(Math.round(clamped)));
+  }
+}
+
+function loadPanelWidthPreference() {
+  try {
+    const saved = window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY);
+    if (!saved) {
+      applyPanelWidth(35);
+      return;
+    }
+    applyPanelWidth(Number(saved));
+  } catch (error) {
+    applyPanelWidth(35);
+  }
+}
+
+function savePanelWidthPreference(widthPercent) {
+  try {
+    window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(clampPanelWidth(widthPercent)));
+  } catch (error) {
+  }
+}
+
+function initPanelResizer() {
+  if (!appBody || !panelResizer) {
+    return;
+  }
+
+  const onDrag = (clientX) => {
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      return;
+    }
+    const rect = appBody.getBoundingClientRect();
+    if (!rect.width) {
+      return;
+    }
+    const percent = ((clientX - rect.left) / rect.width) * 100;
+    applyPanelWidth(percent);
+  };
+
+  panelResizer.addEventListener("pointerdown", (event) => {
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      return;
+    }
+    event.preventDefault();
+    panelResizer.classList.add("is-dragging");
+    panelResizer.setPointerCapture(event.pointerId);
+    onDrag(event.clientX);
+
+    const moveHandler = (moveEvent) => {
+      onDrag(moveEvent.clientX);
+    };
+    const upHandler = (upEvent) => {
+      panelResizer.classList.remove("is-dragging");
+      panelResizer.releasePointerCapture(upEvent.pointerId);
+      const current = parseFloat(appBody.style.getPropertyValue("--panel-width"));
+      savePanelWidthPreference(current);
+      panelResizer.removeEventListener("pointermove", moveHandler);
+      panelResizer.removeEventListener("pointerup", upHandler);
+      panelResizer.removeEventListener("pointercancel", upHandler);
+      map.invalidateSize();
+      scheduleDynamicTableLayout();
+    };
+
+    panelResizer.addEventListener("pointermove", moveHandler);
+    panelResizer.addEventListener("pointerup", upHandler);
+    panelResizer.addEventListener("pointercancel", upHandler);
+  });
+
+  panelResizer.addEventListener("keydown", (event) => {
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      return;
+    }
+    const current = parseFloat(appBody.style.getPropertyValue("--panel-width")) || 35;
+    let next = current;
+    if (event.key === "ArrowLeft") {
+      next = current - 1;
+    } else if (event.key === "ArrowRight") {
+      next = current + 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    applyPanelWidth(next);
+    savePanelWidthPreference(next);
+    map.invalidateSize();
+    scheduleDynamicTableLayout();
+  });
+
+  loadPanelWidthPreference();
+}
+
+function isTruthyFlag(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
+function isDebugSizeBadgeEnabled() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const queryFlag =
+      params.get("debugSize") ||
+      params.get("debug-size") ||
+      params.get("debug") ||
+      "";
+    if (isTruthyFlag(queryFlag)) {
+      return true;
+    }
+    const storedFlag = window.localStorage.getItem(DEBUG_BADGE_STORAGE_KEY);
+    return isTruthyFlag(storedFlag);
+  } catch (error) {
+    return false;
+  }
+}
+
+function getPageZoomLabel() {
+  const vvScale = Number(window.visualViewport?.scale);
+  if (Number.isFinite(vvScale) && vvScale > 0) {
+    return `${Math.round(vvScale * 100)}%`;
+  }
+  return "n/a";
+}
+
+function updateDebugSizeBadge() {
+  if (!debugSizeBadgeEl) {
+    return;
+  }
+  const width = Math.round(window.innerWidth || 0);
+  const height = Math.round(window.innerHeight || 0);
+  const dpr = Number(window.devicePixelRatio || 1).toFixed(2);
+  const mapZoom = Number.isFinite(map?.getZoom?.()) ? map.getZoom().toFixed(2) : "n/a";
+  const pageZoom = getPageZoomLabel();
+  debugSizeBadgeEl.textContent = `VP ${width}×${height} | Page ${pageZoom} | DPR ${dpr} | Map z${mapZoom}`;
+}
+
+function initDebugSizeBadge() {
+  if (!isDebugSizeBadgeEnabled()) {
+    return;
+  }
+  const badge = document.createElement("div");
+  badge.className = "debug-size-badge";
+  document.body.appendChild(badge);
+  debugSizeBadgeEl = badge;
+  updateDebugSizeBadge();
+  window.addEventListener("resize", updateDebugSizeBadge);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", updateDebugSizeBadge);
+    window.visualViewport.addEventListener("scroll", updateDebugSizeBadge);
+  }
+  map.on("zoomend", updateDebugSizeBadge);
+  map.on("moveend", updateDebugSizeBadge);
 }
 
 function updateSelectedRegionTitle() {
@@ -469,6 +686,24 @@ function locationUrl(locId) {
   return locId ? `https://www.ebird.org/hotspot/${encodeURIComponent(String(locId))}` : "";
 }
 
+function googleMapsPointUrl(lat, lng) {
+  const latN = Number(lat);
+  const lngN = Number(lng);
+  if (!Number.isFinite(latN) || !Number.isFinite(lngN)) {
+    return "";
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latN},${lngN}`)}`;
+}
+
+function renderMapPinButton(lat, lng, label) {
+  const url = googleMapsPointUrl(lat, lng);
+  if (!url) {
+    return "";
+  }
+  const title = label ? `Open ${label} in Google Maps` : "Open in Google Maps";
+  return `<button type="button" class="row-map-btn" data-map-url="${escapeAttr(url)}" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">📍</button>`;
+}
+
 function clearMarkers() {
   notReviewedLayer.clearLayers();
   acceptedLayer.clearLayers();
@@ -567,7 +802,7 @@ function renderAllMarkers() {
   const highlightMarkers = [];
 
   // Get filtered data from both sources
-  const notableData = getFilteredData();
+  const notableData = (showCountyMap && showCountyMap.checked) ? getFilteredData() : [];
   const lower48Data = (showAbaMap && showAbaMap.checked) ? getFilteredAbaData() : [];
 
   // Group all observations by county from both sources
@@ -880,7 +1115,8 @@ function renderAllMarkers() {
         selectCountyByName(state, county);
       });
 
-      acceptedLayer.addLayer(clusterMarker);
+      const clusterTargetLayer = hasLower48 ? abaLayer : acceptedLayer;
+      clusterTargetLayer.addLayer(clusterMarker);
       if (hasHighlight) {
         highlightMarkers.push(clusterMarker);
       }
@@ -920,16 +1156,80 @@ function setOverlay(layer, enabled) {
   }
 }
 
+function setTableBlockState(tbody, hasRows) {
+  if (!tbody || typeof tbody.closest !== "function") {
+    return;
+  }
+  const block = tbody.closest(".info-block.table-block");
+  if (!block) {
+    return;
+  }
+  block.classList.toggle("table-empty", !hasRows);
+}
+
+function applyDynamicTableLayout() {
+  tableLayoutFrame = null;
+  if (!appBody) {
+    return;
+  }
+  const blocks = Array.from(document.querySelectorAll(".info-block.table-block"));
+  if (!blocks.length) {
+    return;
+  }
+
+  blocks.forEach((block) => block.classList.remove("table-compact"));
+
+  requestAnimationFrame(() => {
+    const equalHeights = blocks.map((block) => block.getBoundingClientRect().height || 0);
+
+    blocks.forEach((block, index) => {
+      if (block.classList.contains("table-empty")) {
+        return;
+      }
+      const header = block.querySelector(".table-header");
+      const tableWrap = block.querySelector(".table-wrap");
+      const exportRow = block.querySelector(".table-export-row");
+      if (!tableWrap) {
+        return;
+      }
+      const tableElement = tableWrap.querySelector("table");
+      const tableContentHeight = tableElement
+        ? Math.ceil(tableElement.getBoundingClientRect().height)
+        : (tableWrap.scrollHeight || 0);
+      const contentHeight =
+        (header?.offsetHeight || 0) +
+        tableContentHeight +
+        (exportRow?.offsetHeight || 0) +
+        32;
+      const equalHeight = equalHeights[index] || 0;
+      if (equalHeight > 0 && contentHeight < equalHeight - 8) {
+        block.classList.add("table-compact");
+      }
+    });
+  });
+}
+
+function scheduleDynamicTableLayout() {
+  if (tableLayoutFrame) {
+    cancelAnimationFrame(tableLayoutFrame);
+  }
+  tableLayoutFrame = requestAnimationFrame(applyDynamicTableLayout);
+}
+
 function renderSightingsTable(data, emptyMessage) {
   if (!sightingsBody) {
     return;
   }
 
   if (!Array.isArray(data) || data.length === 0) {
+    setTableBlockState(sightingsBody, false);
     sightingsBody.innerHTML =
-      emptyMessage || "<tr><td colspan='7'>No results</td></tr>";
+      emptyMessage || "<tr><td colspan='9'>No results</td></tr>";
+    scheduleDynamicTableLayout();
     return;
   }
+
+  setTableBlockState(sightingsBody, true);
 
   const grouped = new Map();
 
@@ -1042,6 +1342,7 @@ function renderSightingsTable(data, emptyMessage) {
         : "";
       const countyCell = item.county || "";
       const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${escapeAttr(item.state || "")}" data-county="${escapeAttr(countyCell)}">${safeCounty}</button>` : "";
+      const mapPin = renderMapPinButton(item.lat, item.lng, item.species || "location");
       const rowId = `notable-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}" data-confirmed="${item.confirmedAny ? "1" : "0"}">
@@ -1053,12 +1354,14 @@ function renderSightingsTable(data, emptyMessage) {
           <td>${firstBubble}</td>
           <td>${item.count}</td>
           <td class="col-checkbox"><input type="checkbox" class="export-checkbox" data-row-id="${rowId}" checked /></td>
+          <td class="col-map">${mapPin}</td>
         </tr>
       `;
     })
     .join("");
 
-  sightingsBody.innerHTML = rows || "<tr><td colspan='8'>No results</td></tr>";
+  sightingsBody.innerHTML = rows || "<tr><td colspan='9'>No results</td></tr>";
+  scheduleDynamicTableLayout();
 }
 
 function renderAbaTable(data, emptyMessage) {
@@ -1067,10 +1370,14 @@ function renderAbaTable(data, emptyMessage) {
   }
 
   if (!Array.isArray(data) || data.length === 0) {
+    setTableBlockState(abaSightingsBody, false);
     abaSightingsBody.innerHTML =
-      emptyMessage || "<tr><td colspan='8'>No results</td></tr>";
+      emptyMessage || "<tr><td colspan='9'>No results</td></tr>";
+    scheduleDynamicTableLayout();
     return;
   }
+
+  setTableBlockState(abaSightingsBody, true);
 
   // Filter by selected county if one is active
   let filteredData = data;
@@ -1192,6 +1499,7 @@ function renderAbaTable(data, emptyMessage) {
         : "";
       const countyCell = item.county || "";
       const countyClickable = countyCell ? `<button type="button" class="county-link" data-state="${escapeAttr(item.state || "")}" data-county="${escapeAttr(countyCell)}">${safeCounty}</button>` : "";
+      const mapPin = renderMapPinButton(item.lat, item.lng, item.species || "location");
       const rowId = `aba-${index}`;
       return `
         <tr data-row-id="${rowId}" data-lat="${item.lat ?? ""}" data-lng="${item.lng ?? ""}" data-species="${escapeAttr(item.species)}" data-county="${escapeAttr(item.county || "")}" data-state="${escapeAttr(item.state || "")}" data-aba="${item.abaCode ?? ""}" data-locid="${escapeAttr(item.locId || "")}" data-last="${escapeAttr(lastReported)}" data-first="${escapeAttr(firstReported)}">
@@ -1203,12 +1511,14 @@ function renderAbaTable(data, emptyMessage) {
           <td>${firstBubble}</td>
           <td>${item.count}</td>
           <td class="col-checkbox"><input type="checkbox" class="export-checkbox" data-row-id="${rowId}" checked /></td>
+          <td class="col-map">${mapPin}</td>
         </tr>
       `;
     })
     .join("");
 
-  abaSightingsBody.innerHTML = rows || "<tr><td colspan='8'>No results</td></tr>";
+  abaSightingsBody.innerHTML = rows || "<tr><td colspan='9'>No results</td></tr>";
+  scheduleDynamicTableLayout();
 }
 
 function getAbaColor(code) {
@@ -1638,8 +1948,8 @@ async function refreshData() {
     : 7;
   setStatus("Loading data...");
   updateQueryDisplay(region, back);
-  renderSightingsTable([], "<tr><td colspan='8'>Loading county sightings...</td></tr>");
-  renderAbaTable([], "<tr><td colspan='8'>Loading Lower 48 rarities...</td></tr>");
+  renderSightingsTable([], "<tr><td colspan='9'>Loading county sightings...</td></tr>");
+  renderAbaTable([], "<tr><td colspan='9'>Loading Lower 48 rarities...</td></tr>");
 
   try {
     const response = await fetch(
@@ -1663,7 +1973,7 @@ async function refreshData() {
   } catch (error) {
     console.error(error);
     setStatus(`Error loading data: ${error.message}`);
-    renderSightingsTable([], `<tr><td colspan='7'>Error loading county data: ${String(error.message || error)}</td></tr>`);
+    renderSightingsTable([], `<tr><td colspan='9'>Error loading county data: ${String(error.message || error)}</td></tr>`);
   }
 }
 
@@ -1760,14 +2070,14 @@ async function refreshAbaData(back, options = {}) {
       const suffix = suffixParts.length ? ` (${suffixParts.join(", ")})` : "";
       renderAbaTable(
         [],
-        `<tr><td colspan='8'>No Lower 48 data returned${suffix}.</td></tr>`
+        `<tr><td colspan='9'>No Lower 48 data returned${suffix}.</td></tr>`
       );
     } else {
       // Render table with filtered data
       renderAbaTable(
         filteredForMap,
         filteredForMap.length === 0
-          ? "<tr><td colspan='8'>No results match current filters (try adjusting Days Back or ABA code slider).</td></tr>"
+          ? "<tr><td colspan='9'>No results match current filters (try adjusting Days Back or ABA code slider).</td></tr>"
           : undefined
       );
     }
@@ -1777,7 +2087,7 @@ async function refreshAbaData(back, options = {}) {
     setStatus(`Lower 48 overlay error: ${message}`);
     renderAbaTable(
       [],
-      `<tr><td colspan='8'>Lower 48 error: ${message}</td></tr>`
+      `<tr><td colspan='9'>Lower 48 error: ${message}</td></tr>`
     );
   }
 }
@@ -1848,6 +2158,9 @@ async function loadCountyBoundaries() {
     const geojson = topojson.feature(topoData, topoData.objects.counties);
     countyCache[desired] = geojson;
     countyResolution = desired;
+    if (desired === "high") {
+      buildHighResCountyTiles(geojson);
+    }
     applyCountyData(geojson);
   } catch (error) {
     console.error(error);
@@ -1886,54 +2199,39 @@ function applyCountyData(geojson) {
   }, 400);
 }
 
-const HIGH_RES_MIN_ZOOM = 7;
 let highResLoadInFlight = false;
 
 async function loadHighResCounties() {
-  if (!highResCountiesToggle || !highResCountiesToggle.checked) {
+  if (highResCountyTilesReady || highResLoadInFlight) {
+    ensureBoundaryVisibility();
     return;
   }
-  if (typeof osmtogeojson === "undefined") {
-    setStatus("High-res counties unavailable (osmtogeojson missing).");
-    return;
-  }
-  const zoom = map.getZoom();
-  if (zoom < HIGH_RES_MIN_ZOOM) {
-    setStatus("Zoom in for high-res counties.");
-    highResCountyLayer.clearLayers();
-    return;
-  }
-  if (highResLoadInFlight) {
+  if (map.getZoom() < HIGH_RES_VISUAL_MIN_ZOOM) {
     return;
   }
   highResLoadInFlight = true;
   try {
-    const bounds = map.getBounds();
-    const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
-    const query = `
-      [out:json][timeout:25];
-      (
-        rel["admin_level"="6"]["boundary"="administrative"](${bbox});
-      );
-      out geom;
-    `;
-    const response = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      body: `data=${encodeURIComponent(query)}`
-    });
-    if (!response.ok) {
-      throw new Error(`Overpass error ${response.status}`);
+    if (countyCache.high) {
+      buildHighResCountyTiles(countyCache.high);
+      ensureBoundaryVisibility();
+      return;
     }
-    const data = await response.json();
-    const geojson = osmtogeojson(data);
-    highResCountyLayer.clearLayers();
-    highResCountyLayer.addData(geojson);
-    highResCountyLayer.setStyle(getCountyStyle);
+    if (typeof topojson === "undefined") {
+      throw new Error("TopoJSON library not loaded.");
+    }
+    const highUrls = [
+      "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-5m.json",
+      "https://unpkg.com/us-atlas@3/counties-5m.json",
+      "https://cdnjs.cloudflare.com/ajax/libs/us-atlas/3.0.1/counties-5m.json"
+    ];
+    const topoData = await fetchTopoJson(highUrls, "high-res county boundaries");
+    const geojson = topojson.feature(topoData, topoData.objects.counties);
+    countyCache.high = geojson;
+    buildHighResCountyTiles(geojson);
     ensureBoundaryVisibility();
-    setStatus("High-res counties loaded.");
   } catch (error) {
     console.error(error);
-    setStatus("High-res counties unavailable.");
+    setStatus("High-res county tiles unavailable.");
   } finally {
     highResLoadInFlight = false;
   }
@@ -2052,11 +2350,8 @@ function zoomToRegion(regionCode) {
     const layer = L.geoJSON(feature);
     const bounds = layer.getBounds();
     if (bounds && bounds.isValid()) {
-      map.fitBounds(bounds.pad(0.1), { maxZoom: 9 });
-      map.once("moveend", () => {
-        const currentZoom = map.getZoom();
-        map.setZoom(Math.min(currentZoom + 2, 11));
-      });
+      map.stop();
+      map.fitBounds(bounds.pad(0.06), { maxZoom: 10 });
     }
   } catch (error) {
     console.error(error);
@@ -2092,8 +2387,8 @@ daysInput.addEventListener("input", () => {
   renderAbaTable(
     abaFiltered,
     abaData.length
-      ? "<tr><td colspan='8'>No ABA results for current filters.</td></tr>"
-      : "<tr><td colspan='8'>No ABA results returned by eBird.</td></tr>"
+      ? "<tr><td colspan='9'>No ABA results for current filters.</td></tr>"
+      : "<tr><td colspan='9'>No ABA results returned by eBird.</td></tr>"
   );
 });
 
@@ -2347,19 +2642,14 @@ if (showCountyMap) {
     const enabled = showCountyMap.checked;
     setOverlay(notReviewedLayer, enabled);
     setOverlay(acceptedLayer, enabled);
+    renderAllMarkers();
   });
 }
 
 if (highResCountiesToggle) {
   highResCountiesToggle.addEventListener("change", () => {
-    if (highResCountiesToggle.checked) {
-      highResCountyLayer.addTo(map);
+    if (highResCountiesToggle.checked && map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM) {
       loadHighResCounties();
-    } else {
-      highResCountyLayer.clearLayers();
-      if (map.hasLayer(highResCountyLayer)) {
-        map.removeLayer(highResCountyLayer);
-      }
     }
     ensureBoundaryVisibility();
   });
@@ -2397,12 +2687,6 @@ if (appTitleHome) {
   });
 }
 
-if (showSpeciesLabels) {
-  showSpeciesLabels.addEventListener("change", () => {
-    renderAllMarkers();
-  });
-}
-
 if (sightingsBody) {
   sightingsBody.addEventListener("click", (event) => {
     const target = event.target;
@@ -2415,6 +2699,15 @@ if (sightingsBody) {
       const state = stateButton.getAttribute("data-state");
       if (state) {
         focusRegionFromStateCode(state);
+      }
+      return;
+    }
+
+    const mapButton = target.closest(".row-map-btn");
+    if (mapButton) {
+      const url = mapButton.getAttribute("data-map-url");
+      if (url) {
+        window.open(url, "_blank", "noopener");
       }
       return;
     }
@@ -2454,6 +2747,15 @@ if (abaSightingsBody) {
       }
       return;
     }
+
+    const mapButton = target.closest(".row-map-btn");
+    if (mapButton) {
+      const url = mapButton.getAttribute("data-map-url");
+      if (url) {
+        window.open(url, "_blank", "noopener");
+      }
+      return;
+    }
     
     // Check for county link click
     const countyButton = target.closest(".county-link");
@@ -2475,6 +2777,9 @@ if (abaSightingsBody) {
   });
 }
 
+initPanelResizer();
+initDebugSizeBadge();
+
 map.whenReady(async () => {
   setOverlay(cartoLabels, true);
   setOverlay(notReviewedLayer, showCountyMap?.checked ?? true);
@@ -2490,9 +2795,14 @@ map.whenReady(async () => {
     ensureBoundaryVisibility();
   }, 300);
   setTimeout(() => ensureBoundaryVisibility(), 1200);
+  updateDebugSizeBadge();
+  if (map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM) {
+    debouncedHighResLoad();
+  }
   if (!abaData.length) {
     refreshAbaData(daysInput.value, { renderMap: showAbaMap?.checked ?? false });
   }
+  scheduleDynamicTableLayout();
 });
 
 window.addEventListener("load", () => {
@@ -2501,7 +2811,10 @@ window.addEventListener("load", () => {
   loadStateBoundaries();
   applyBoundaryStyles();
   ensureBoundaryVisibility();
+  scheduleDynamicTableLayout();
 });
+
+window.addEventListener("resize", scheduleDynamicTableLayout);
 
 if (abaCodeMin && abaCodeValue) {
   abaCodeMin.addEventListener("input", () => {
@@ -2531,12 +2844,13 @@ loadAbaMeta();
 map.on("zoomend", () => loadCountyBoundaries());
 map.on("zoomend", () => applyBoundaryStyles());
 map.on("moveend", () => {
-  if (highResCountiesToggle && highResCountiesToggle.checked) {
+  if (map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM) {
     debouncedHighResLoad();
   }
 });
 map.on("zoomend", () => {
-  if (highResCountiesToggle && highResCountiesToggle.checked) {
+  ensureBoundaryVisibility();
+  if (map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM) {
     debouncedHighResLoad();
   }
 });

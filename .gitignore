@@ -21,3 +21,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Local release helpers
+pushit.sh
+release.sh
+release.Sh

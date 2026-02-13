@@ -62,7 +62,7 @@
                 </div>
               </div>
             </div>
-            <div class="info-block table-block">
+            <div class="info-block table-block table-block-lower48">
               <div class="table-header">
                 <h2>Lower 48 Rarities</h2>
                 <div class="table-filters" aria-label="ABA table filters">
@@ -87,17 +87,18 @@
                       <th class="col-date">Last</th>
                       <th class="col-date">First</th>
                       <th class="col-reports">R</th>
-                      <th class="col-checkbox"><input type="checkbox" id="selectAllAba" checked title="Select/deselect all" /></th>
+                      <th class="col-checkbox"></th>
+                      <th class="col-map"></th>
                     </tr>
                   </thead>
                   <tbody id="abaSightingsBody"></tbody>
                 </table>
               </div>
-              <div style="padding: 4px 0 1px; text-align: right;">
+              <div class="table-export-row">
                 <button id="googleMapAba" type="button" class="google-map-btn" title="Download KML file to import into Google My Maps" aria-label="Download KML file to import into Google My Maps">⇄</button>
               </div>
             </div>
-            <div class="info-block table-block">
+            <div class="info-block table-block table-block-notable">
               <div class="table-header">
                 <h2>Notable — <span id="selectedRegionTitle">Selected Region</span></h2>
                 <div class="table-filters" aria-label="County table filters">
@@ -122,18 +123,19 @@
                       <th class="col-date">Last</th>
                       <th class="col-date">First</th>
                       <th class="col-reports">R</th>
-                      <th class="col-checkbox"><input type="checkbox" id="selectAllNotable" checked title="Select/deselect all" /></th>
+                      <th class="col-checkbox"></th>
+                      <th class="col-map"></th>
                     </tr>
                   </thead>
                   <tbody id="sightingsBody"></tbody>
                 </table>
               </div>
-              <div style="padding: 4px 0 1px; text-align: right;">
+              <div class="table-export-row">
                 <button id="googleMapNotable" type="button" class="google-map-btn" title="Download KML file to import into Google My Maps" aria-label="Download KML file to import into Google My Maps">⇄</button>
               </div>
             </div>
           </div>
-          <div class="panel-footer">
+          <div class="info-block support-card">
             <a
               class="sponsorButton"
               href="https://buymeacoffee.com/bartg"
@@ -150,6 +152,7 @@
             <span class="footerCopyright">© Bart Wickel, 2026</span>
           </div>
         </aside>
+        <div class="panel-resizer" id="panelResizer" role="separator" aria-orientation="vertical" aria-label="Resize side panel" tabindex="0"></div>
         <main id="map" aria-label="Map">
           <div class="map-controls" role="group" aria-label="Layer controls">
             <h2>Layer Controls</h2>
@@ -176,6 +179,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script>
     <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
     <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
     <script src="https://unpkg.com/osmtogeojson@3.0.0/osmtogeojson.js"></script>
