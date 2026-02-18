@@ -148,7 +148,7 @@ const highResCountyLayer = L.geoJSON(null, {
 });
 
 const countyLabelLayer = L.layerGroup().addTo(map);
-const countyClusterLabelLayer = L.layerGroup().addTo(map);
+const countyClusterLabelLayer = L.layerGroup(); // not added to map — controlled by showCountyLabels + zoom
 const stateClusterLayer = L.layerGroup().addTo(map);
 const HIGH_RES_VISUAL_MIN_ZOOM = 8;
 
@@ -300,6 +300,7 @@ const baseLayerRadios = document.querySelectorAll("input[name='basemap']");
 const showCountyMap = document.getElementById("showCountyMap");
 const showAbaMap = document.getElementById("showAbaMap");
 const showSpeciesLabels = document.getElementById("showSpeciesLabels");
+const showCountyLabels = document.getElementById("showCountyLabels");
 const abaCodeMin = document.getElementById("abaCodeMin");
 const abaCodeValue = document.getElementById("abaCodeValue");
 const countyCodeMin = document.getElementById("countyCodeMin");
@@ -1295,8 +1296,8 @@ async function renderAllMarkers() {
         highlightMarkers.push(clusterMarker);
       }
 
-      // County name label below the cluster dot — only at zoom >= 7
-      if (countyClusterLabelLayer && map.getZoom() >= 7) {
+      // County name label below the cluster dot — only when checkbox enabled and zoom >= 7
+      if (countyClusterLabelLayer && (showCountyLabels?.checked) && map.getZoom() >= 7) {
         const clusterSize = Math.min(40 + Math.log(totalCount) * 5, 60);
         const labelMarker = L.marker([centerLat, centerLng], {
           pane: "countyLabelPane",
@@ -2889,6 +2890,18 @@ if (showSpeciesLabels) {
   });
 }
 
+if (showCountyLabels) {
+  showCountyLabels.addEventListener("change", () => {
+    const shouldShow = showCountyLabels.checked && map.getZoom() >= 7;
+    if (shouldShow) {
+      if (!map.hasLayer(countyClusterLabelLayer)) map.addLayer(countyClusterLabelLayer);
+    } else {
+      if (map.hasLayer(countyClusterLabelLayer)) map.removeLayer(countyClusterLabelLayer);
+    }
+    renderAllMarkers();
+  });
+}
+
 if (appTitleHome) {
   const reloadPage = () => {
     window.location.reload();
@@ -3065,9 +3078,10 @@ loadAbaMeta();
 map.on("zoomend", () => loadCountyBoundaries());
 map.on("zoomend", () => applyBoundaryStyles());
 map.on("zoomend", () => {
-  // Show county cluster name labels only at zoom >= 7
+  // Show county cluster name labels only when enabled and zoom >= 7
   if (countyClusterLabelLayer) {
-    if (map.getZoom() >= 7) {
+    const shouldShow = (showCountyLabels?.checked ?? false) && map.getZoom() >= 7;
+    if (shouldShow) {
       if (!map.hasLayer(countyClusterLabelLayer)) map.addLayer(countyClusterLabelLayer);
     } else {
       if (map.hasLayer(countyClusterLabelLayer)) map.removeLayer(countyClusterLabelLayer);
