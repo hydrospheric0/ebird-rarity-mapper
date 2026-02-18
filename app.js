@@ -148,6 +148,7 @@ const highResCountyLayer = L.geoJSON(null, {
 });
 
 const countyLabelLayer = L.layerGroup().addTo(map);
+const countyClusterLabelLayer = L.layerGroup().addTo(map);
 const stateClusterLayer = L.layerGroup().addTo(map);
 const HIGH_RES_VISUAL_MIN_ZOOM = 8;
 
@@ -936,6 +937,7 @@ async function renderAllMarkers() {
   clearMarkers();
   clearAbaMarkers();
   if (countyLabelLayer) countyLabelLayer.clearLayers();
+  if (countyClusterLabelLayer) countyClusterLabelLayer.clearLayers();
   
   const highlight = activeSpeciesHighlight
     ? String(activeSpeciesHighlight).toLowerCase()
@@ -1293,8 +1295,8 @@ async function renderAllMarkers() {
         highlightMarkers.push(clusterMarker);
       }
 
-      // County name label below the cluster dot
-      if (countyLabelLayer) {
+      // County name label below the cluster dot — only at zoom >= 7
+      if (countyClusterLabelLayer && map.getZoom() >= 7) {
         const clusterSize = Math.min(40 + Math.log(totalCount) * 5, 60);
         const labelMarker = L.marker([centerLat, centerLng], {
           pane: "countyLabelPane",
@@ -1306,7 +1308,7 @@ async function renderAllMarkers() {
             iconAnchor: [0, -(clusterSize / 2 + 3)]
           })
         });
-        countyLabelLayer.addLayer(labelMarker);
+        countyClusterLabelLayer.addLayer(labelMarker);
       }
     }
   });
@@ -3062,6 +3064,16 @@ loadAbaMeta();
 })();
 map.on("zoomend", () => loadCountyBoundaries());
 map.on("zoomend", () => applyBoundaryStyles());
+map.on("zoomend", () => {
+  // Show county cluster name labels only at zoom >= 7
+  if (countyClusterLabelLayer) {
+    if (map.getZoom() >= 7) {
+      if (!map.hasLayer(countyClusterLabelLayer)) map.addLayer(countyClusterLabelLayer);
+    } else {
+      if (map.hasLayer(countyClusterLabelLayer)) map.removeLayer(countyClusterLabelLayer);
+    }
+  }
+});
 map.on("moveend", () => {
   if (map.getZoom() > 9) {
     debouncedHighResLoad();
