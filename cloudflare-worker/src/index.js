@@ -397,6 +397,24 @@ export default {
         });
       }
 
+      // /api/us_notable_counts — per-state notable count for the whole US, cached 30 min
+      if (url.pathname === '/api/us_notable_counts') {
+        const back = Math.max(1, Math.min(14, parseInt(url.searchParams.get('back') || '7', 10) || 7));
+        const res = await ebirdFetch(env, '/data/obs/US/recent/notable', { detail: 'simple', back });
+        const raw = await res.json();
+        if (!Array.isArray(raw)) return jsonResponse(request, 502, { error: 'Unexpected eBird response' });
+        const counts = {};
+        for (const item of raw) {
+          const code = (item.subnational1Code || '').toUpperCase();
+          if (!code.startsWith('US-')) continue;
+          const st = code.slice(3);
+          counts[st] = (counts[st] || 0) + 1;
+        }
+        return jsonResponse(request, 200, { back, states: counts }, {
+          'Cache-Control': 'public, max-age=1800',
+        });
+      }
+
       return jsonResponse(request, 404, { error: 'Not found' });
 
     } catch (err) {

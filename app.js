@@ -732,40 +732,52 @@ function renderMapPinButton(lat, lng, label) {
   return `<button type="button" class="row-map-btn" data-map-url="${escapeAttr(url)}" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">📍</button>`;
 }
 
+// National state notable counts cache: { back -> { states: {ST: count} } }
+let usNotableCountsCache = null;
+let usNotableCountsBack = null;
+let usNotableCountsInFlight = false;
+
+async function fetchUsNotableCounts(back) {
+  if (usNotableCountsCache && usNotableCountsBack === back) return usNotableCountsCache;
+  if (usNotableCountsInFlight) return null;
+  usNotableCountsInFlight = true;
+  try {
+    const res = await fetch(`${WORKER_BASE_URL}/api/us_notable_counts?back=${back}`);
+    if (!res.ok) throw new Error(`us_notable_counts ${res.status}`);
+    const data = await res.json();
+    usNotableCountsCache = data.states || {};
+    usNotableCountsBack = back;
+    return usNotableCountsCache;
+  } catch (e) {
+    console.warn('[state-counts] Failed to load US notable counts:', e);
+    return null;
+  } finally {
+    usNotableCountsInFlight = false;
+  }
+}
+
 function clearStateClusterMarkers() {
   stateClusterLayer.clearLayers();
 }
 
-function renderStateClusterMarkers(notableData, lower48Data, activeStateCode) {
-  // Group all data by state, skip the active region state (shown county-level)
-  const stateGroups = new Map(); // stateCode → { notableCount, lower48Count, highestAba }
-  const allItems = [
-    ...(Array.isArray(notableData) ? notableData : []).map(d => ({ ...d, _src: 'notable' })),
-    ...(Array.isArray(lower48Data) ? lower48Data : []).map(d => ({ ...d, _src: 'lower48' })),
-  ];
-  allItems.forEach(item => {
-    const st = getStateAbbrev(item);
-    if (!st || st === activeStateCode) return;
-    if (!stateGroups.has(st)) stateGroups.set(st, { notable: 0, lower48: 0, highestAba: 0 });
-    const g = stateGroups.get(st);
-    if (item._src === 'notable') g.notable++; else g.lower48++;
-    const code = Number(item.abaCode ?? item.abaRarityCode);
-    if (Number.isFinite(code) && code > g.highestAba) g.highestAba = code;
-  });
+async function renderStateClusterMarkers(activeStateCode, back) {
+  const counts = await fetchUsNotableCounts(back);
+  if (!counts) return;
 
-  stateGroups.forEach((g, stateCode) => {
-    const total = g.notable + g.lower48;
-    if (total === 0) return;
+  stateClusterLayer.clearLayers();
+  Object.entries(counts).forEach(([stateCode, total]) => {
+    if (!total || stateCode === activeStateCode) return;
     const centroid = STATE_CENTROIDS[stateCode];
     if (!centroid) return;
-    const color = getAbaColor(g.highestAba);
+    // Use a neutral gray color for state dots (no ABA code detail at this level)
+    const color = '#6b7280';
     const marker = L.marker(centroid, {
       pane: 'markersPane',
       icon: getClusterIcon(total, color),
       riseOnHover: true,
       riseOffset: 250,
     });
-    marker.bindTooltip(`<strong>${stateCode}</strong><br/>${total} notable`, { sticky: true, direction: 'top' });
+    marker.bindTooltip(`<strong>${stateCode}</strong><br/>${total} notables`, { sticky: true, direction: 'top' });
     marker.on('click', () => {
       const regionCode = `US-${stateCode}`;
       const option = Array.from(regionSelect?.options || []).find(o => o.value === regionCode);
@@ -900,9 +912,11 @@ function renderAllMarkers() {
   // Active state = the state part of regionSelect value (e.g. "US-CA" → "CA")
   const activeRegion = regionSelect?.value || DEFAULT_REGION;
   const activeStateCode = activeRegion.startsWith('US-') ? activeRegion.slice(3) : activeRegion;
+  const backDays = Number.isFinite(Number(daysInput?.value)) ? Math.max(1, Math.min(14, Number(daysInput.value))) : 7;
 
-  // Render state-level cluster dots for all non-active states
-  renderStateClusterMarkers(notableData, lower48Data, activeStateCode);
+  // Render state-level cluster dots for all non-active states (async, from national counts API)
+  clearStateClusterMarkers();
+  void renderStateClusterMarkers(activeStateCode, backDays);
 
   // Group all observations by county from both sources
   const countyGroups = new Map();
@@ -2615,6 +2629,7 @@ daysInput.addEventListener("input", () => {
 });
 
 daysInput.addEventListener("change", () => {
+  usNotableCountsCache = null; // invalidate national counts when days changes
   refreshData();
 });
 
