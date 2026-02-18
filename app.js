@@ -112,7 +112,7 @@ if (map.getPane("popupPane")) {
 const stateBaseStyle = {
   color: "#4b5563",
   weight: 2.4,
-  opacity: 0.9,
+  opacity: 0.45,
   fillOpacity: 0
 };
 
