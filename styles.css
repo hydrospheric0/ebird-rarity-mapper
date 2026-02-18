@@ -1031,8 +1031,8 @@ h6 {
 }
 
 .aba-code-1 { background: #16a34a; }
-.aba-code-2 { background: #4ade80; }
-.aba-code-3 { background: #facc15; }
+.aba-code-2 { background: #4ade80; color: #1a2e1a; }
+.aba-code-3 { background: #facc15; color: #3b2e00; }
 .aba-code-4 { background: #fb923c; }
 .aba-code-5 { background: #ef4444; }
 .aba-code-6 { background: #ef4444; }
@@ -1040,6 +1040,14 @@ h6 {
 .aba-code-unknown {
   background: #4b5563;
 }
+
+/* ABA-coded left border on table rows */
+tr[data-aba="1"] { border-left: 3px solid #16a34a; }
+tr[data-aba="2"] { border-left: 3px solid #4ade80; }
+tr[data-aba="3"] { border-left: 3px solid #facc15; }
+tr[data-aba="4"] { border-left: 3px solid #fb923c; }
+tr[data-aba="5"] { border-left: 3px solid #ef4444; }
+tr[data-aba="6"] { border-left: 3px solid #ef4444; }
 
 @media (min-width: 901px) and (max-width: 1280px) {
   .map-controls {

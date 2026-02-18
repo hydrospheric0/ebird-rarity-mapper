@@ -318,6 +318,10 @@ const STATE_CODE_TO_FIPS = {
   TN: "47", TX: "48", UT: "49", VT: "50", VA: "51", WA: "53", WV: "54",
   WI: "55", WY: "56"
 };
+// Reverse lookup: 2-digit state FIPS → 2-letter state code
+const FIPS_TO_STATE_CODE = Object.fromEntries(
+  Object.entries(STATE_CODE_TO_FIPS).map(([k, v]) => [v, k])
+);
 
 L.control.zoom({ position: "topleft" }).addTo(map);
 
@@ -984,8 +988,8 @@ function renderAllMarkers() {
               ${abaBadge}
               <div style="font-weight: 600;">${safeSpecies}</div>
             </div>
-            <div style="margin-bottom: 4px;">${statusBadge}</div>
-            <div style="font-size: 0.85rem;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
+            <div style="font-size: 0.85rem; margin-bottom: 4px;">${checklistLink}${locationLinkHtml ? " | " + locationLinkHtml : ""}</div>
+            <div>${statusBadge}</div>
           </div>
         `;
         
@@ -2258,9 +2262,15 @@ async function workerLoadHiResCounty() {
   countyLayer.eachLayer((layer) => {
     const f = layer.feature;
     if (!f) return;
-    const cr = f.properties?.countyRegion;
     const fp = String(f.id || f.properties?.fips5 || '').replace(/\D/g, '').padStart(5, '0');
-    if (!cr || !fp || fp === '00000') return;
+    if (!fp || fp === '00000') return;
+    // Derive countyRegion from properties or compute from FIPS id
+    const stateFips2 = fp.slice(0, 2);
+    const countyFips3 = fp.slice(2);
+    const stateCode = FIPS_TO_STATE_CODE[stateFips2];
+    const cr = f.properties?.countyRegion ||
+               (stateCode ? `US-${stateCode}-${countyFips3}` : null);
+    if (!cr) return;
     // Rough viewport check using the layer bounds
     try {
       const lb = layer.getBounds ? layer.getBounds() : null;
