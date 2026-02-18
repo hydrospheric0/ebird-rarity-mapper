@@ -152,7 +152,20 @@ const HIGH_RES_VISUAL_MIN_ZOOM = 8;
 let highResCountyTilesLayer = null;
 let highResCountyTilesReady = false;
 
+// ── Worker-backed county boundary state ──────────────────────────────────────
+// Loaded per-state lo-res via worker county_outline; hi-res via county_hires.
+const workerCountyCache = new Map();   // stateCode → GeoJSON FeatureCollection (lo-res)
+const workerHiResCache  = new Map();   // fips5 → GeoJSON FeatureCollection (hi-res TIGER)
+let workerHiResInFlight = false;
+let lastWorkerHiResFips5 = null;       // fips5 of county currently shown hi-res
+let lastLoadedStateCodes = new Set();  // states whose lo-res is currently in countyLayer
+
 function shouldUseHighResCountyVisual() {
+  // Worker-backed: show highResCountyLayer when zoom > 9 and it has data for selected county
+  if (lastWorkerHiResFips5 && highResCountyLayer.getLayers().length > 0) {
+    return map.getZoom() > 9;
+  }
+  // Legacy vectorGrid fallback
   return map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM && highResCountyTilesReady;
 }
 
@@ -184,15 +197,20 @@ function buildHighResCountyTiles(geojson) {
 
 function ensureBoundaryVisibility() {
   const countyEnabled = showCountyMap?.checked ?? true;
+  const useWorkerHiRes = countyEnabled && lastWorkerHiResFips5 && highResCountyLayer.getLayers().length > 0 && map.getZoom() > 9;
   const showHighResVisual = countyEnabled && shouldUseHighResCountyVisual();
   setOverlay(stateLayer, true);
-  setOverlay(countyLayer, countyEnabled);
-  setOverlay(highResCountyLayer, false);
+  // When worker hi-res is active for a county, hide the lo-res outline; otherwise show it
+  setOverlay(countyLayer, countyEnabled && !useWorkerHiRes);
+  setOverlay(highResCountyLayer, useWorkerHiRes);
   if (highResCountyTilesLayer) {
-    setOverlay(highResCountyTilesLayer, showHighResVisual);
+    // Only show vectorGrid tiles as fallback when no worker data
+    setOverlay(highResCountyTilesLayer, showHighResVisual && !useWorkerHiRes);
   }
   countyLayer.bringToFront();
-  if (showHighResVisual && highResCountyTilesLayer) {
+  if (useWorkerHiRes) {
+    highResCountyLayer.bringToFront();
+  } else if (showHighResVisual && highResCountyTilesLayer) {
     highResCountyTilesLayer.bringToFront();
   }
   stateLayer.bringToFront();
@@ -2135,50 +2153,129 @@ map.on("locationerror", () => {
 });
 
 async function loadCountyBoundaries() {
+  // Derive which state(s) are visible from the current map bounds.
+  // We load per-state lo-res GeoJSON from the worker (CF-cached, fast).
+  // Falls back to legacy us-atlas CDN if the worker call fails.
   try {
-    if (typeof topojson === "undefined") {
-      throw new Error("TopoJSON library not loaded.");
+    const bounds = map.getBounds();
+    const center = bounds.getCenter();
+
+    // Collect unique state codes visible in current viewport by sampling corners + center
+    const samplePoints = [
+      center,
+      bounds.getNorthWest(), bounds.getNorthEast(),
+      bounds.getSouthWest(), bounds.getSouthEast(),
+    ];
+
+    // Resolve county for each sample point to get state codes
+    const stateCodesNeeded = new Set();
+    await Promise.all(samplePoints.map(async (pt) => {
+      try {
+        const url = `${WORKER_BASE_URL}/api/county_resolve?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.stateCode) stateCodesNeeded.add(data.stateCode);
+      } catch { /* ignore individual resolve failures */ }
+    }));
+
+    if (stateCodesNeeded.size === 0) {
+      throw new Error("Could not resolve any states for current viewport");
     }
-    if (typeof turf === "undefined") {
-      throw new Error("Turf.js library not loaded.");
+
+    // Fetch any state we don't have cached yet
+    const toFetch = [...stateCodesNeeded].filter(sc => !workerCountyCache.has(sc));
+    if (toFetch.length > 0) {
+      await Promise.all(toFetch.map(async (sc) => {
+        try {
+          const url = `${WORKER_BASE_URL}/api/county_outline?lat=${center.lat.toFixed(5)}&lon=${center.lng.toFixed(5)}`;
+          // Use county_outline for the center point to get the main state; for
+          // adjacent states use the resolve result to build the outline URL.
+          const outlineUrl = `${WORKER_BASE_URL}/api/county_outline?lat=${center.lat.toFixed(5)}&lon=${center.lng.toFixed(5)}&stateCode=${encodeURIComponent(sc)}`;
+          // Simpler: county_outline always returns the full state for the given lat/lon
+          // For adjacent states, re-resolve a corner point that landed in that state
+          let outlineRes = null;
+          // Find a sample point that resolved to this state
+          for (const pt of samplePoints) {
+            try {
+              const rRes = await fetch(`${WORKER_BASE_URL}/api/county_resolve?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`);
+              if (!rRes.ok) continue;
+              const rData = await rRes.json();
+              if (rData?.stateCode === sc) {
+                outlineRes = await fetch(`${WORKER_BASE_URL}/api/county_outline?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`);
+                break;
+              }
+            } catch { continue; }
+          }
+          if (!outlineRes || !outlineRes.ok) return;
+          const geo = await outlineRes.json();
+          if (geo?.features?.length) {
+            // Store without isActiveCounty styling — desktop manages selection separately
+            const neutralFeatures = geo.features.map(f => ({
+              ...f,
+              // Ensure feature.id is set from fips5 for compatibility with
+              // existing selection logic (getSelectedCountyStateAbbrev etc.)
+              id: f.properties?.fips5 || f.id || null,
+              properties: { ...f.properties, isActiveCounty: false },
+            }));
+            workerCountyCache.set(sc, { type: 'FeatureCollection', features: neutralFeatures });
+          }
+        } catch (e) {
+          console.warn(`[county] failed to load state ${sc}:`, e);
+        }
+      }));
     }
+
+    // Merge all cached states into a single GeoJSON and apply
+    const allFeatures = [];
+    for (const sc of stateCodesNeeded) {
+      const geo = workerCountyCache.get(sc);
+      if (geo?.features) allFeatures.push(...geo.features);
+    }
+
+    if (allFeatures.length === 0) throw new Error("No county features loaded from worker");
+
+    lastLoadedStateCodes = stateCodesNeeded;
+    applyCountyData({ type: 'FeatureCollection', features: allFeatures });
+
+    // If we're already zoomed in, fire hi-res for the selected county
+    if (map.getZoom() > 9) workerLoadHiResCounty();
+
+  } catch (error) {
+    console.warn("[county] Worker county load failed, falling back to us-atlas:", error);
+    await loadCountyBoundariesLegacy();
+  }
+}
+
+async function loadCountyBoundariesLegacy() {
+  // Legacy fallback: us-atlas TopoJSON from CDN
+  try {
+    if (typeof topojson === "undefined") throw new Error("TopoJSON library not loaded.");
+    if (typeof turf === "undefined") throw new Error("Turf.js library not loaded.");
     let desired = getCountyResolutionForZoom(map.getZoom());
     if (desired === countyResolution && countyCache[desired]) {
       applyCountyData(countyCache[desired]);
       return;
     }
-
     const highUrls = [
       "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-5m.json",
       "https://unpkg.com/us-atlas@3/counties-5m.json",
-      "https://cdnjs.cloudflare.com/ajax/libs/us-atlas/3.0.1/counties-5m.json"
     ];
     const lowUrls = [
       "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json",
       "https://unpkg.com/us-atlas@3/counties-10m.json",
-      "https://cdnjs.cloudflare.com/ajax/libs/us-atlas/3.0.1/counties-10m.json"
     ];
-
     let topoData = null;
     try {
-      topoData = await fetchTopoJson(
-        desired === "high" ? highUrls : lowUrls,
-        "county boundaries"
-      );
-    } catch (error) {
-      if (desired === "high") {
-        desired = "low";
-        topoData = await fetchTopoJson(lowUrls, "county boundaries");
-      } else {
-        throw error;
-      }
+      topoData = await fetchTopoJson(desired === "high" ? highUrls : lowUrls, "county boundaries");
+    } catch (e) {
+      if (desired === "high") { desired = "low"; topoData = await fetchTopoJson(lowUrls, "county boundaries"); }
+      else throw e;
     }
     const geojson = topojson.feature(topoData, topoData.objects.counties);
     countyCache[desired] = geojson;
     countyResolution = desired;
-    if (desired === "high") {
-      buildHighResCountyTiles(geojson);
-    }
+    if (desired === "high") buildHighResCountyTiles(geojson);
     applyCountyData(geojson);
   } catch (error) {
     console.error(error);
@@ -2219,28 +2316,86 @@ function applyCountyData(geojson) {
 
 let highResLoadInFlight = false;
 
-async function loadHighResCounties() {
-  if (highResCountyTilesReady || highResLoadInFlight) {
+// Worker-backed hi-res: fetch single-county TIGER geometry via county_hires endpoint.
+// Only fires when a county is selected and zoom > 9.
+async function workerLoadHiResCounty() {
+  if (map.getZoom() <= 9) {
+    // Zoomed out — restore lo-res outline for selected county if present
+    if (lastWorkerHiResFips5) {
+      highResCountyLayer.clearLayers();
+      lastWorkerHiResFips5 = null;
+      highResCountyTilesReady = false;
+      ensureBoundaryVisibility();
+    }
+    return;
+  }
+  // Determine which county to load hi-res for: selected county or map centre county
+  let fips5 = null;
+  let countyRegion = null;
+  if (selectedCounty) {
+    fips5 = String(selectedCounty.id || selectedCounty.properties?.fips5 || '').replace(/\D/g, '').padStart(5, '0');
+    countyRegion = selectedCounty.properties?.countyRegion || null;
+  }
+  if (!fips5 || fips5 === '00000') return;
+  if (fips5 === lastWorkerHiResFips5) return;  // already showing hi-res for this county
+  if (workerHiResInFlight) return;
+
+  workerHiResInFlight = true;
+  try {
+    let geo = workerHiResCache.get(fips5);
+    if (!geo) {
+      // Derive countyRegion if not available from feature properties
+      if (!countyRegion) {
+        const sc = Object.keys(STATE_CODE_TO_FIPS).find(k => STATE_CODE_TO_FIPS[k] === fips5.slice(0, 2));
+        if (sc) countyRegion = `US-${sc}-${fips5.slice(2)}`;
+      }
+      if (!countyRegion) return;
+      const res = await fetch(`${WORKER_BASE_URL}/api/county_hires?countyRegion=${encodeURIComponent(countyRegion)}`);
+      if (!res.ok) throw new Error(`county_hires ${res.status}`);
+      geo = await res.json();
+      if (geo?.features?.length) {
+        // Tag features with fips5/id for style lookups
+        geo = {
+          ...geo,
+          features: geo.features.map(f => ({
+            ...f,
+            id: fips5,
+            properties: { ...f.properties, fips5, isActiveCounty: true, hiRes: true },
+          })),
+        };
+        workerHiResCache.set(fips5, geo);
+      }
+    }
+    if (!geo?.features?.length) return;
+    highResCountyLayer.clearLayers();
+    highResCountyLayer.addData(geo);
+    highResCountyLayer.setStyle(getCountyStyle);
+    lastWorkerHiResFips5 = fips5;
+    highResCountyTilesReady = true;
     ensureBoundaryVisibility();
+  } catch (e) {
+    console.warn('[hi-res] county_hires failed:', e);
+  } finally {
+    workerHiResInFlight = false;
+  }
+}
+
+async function loadHighResCounties() {
+  // Delegate to worker hi-res; fall back to legacy vectorGrid approach
+  if (map.getZoom() <= 9) { ensureBoundaryVisibility(); return; }
+  if (selectedCounty) {
+    void workerLoadHiResCounty();
     return;
   }
-  if (map.getZoom() < HIGH_RES_VISUAL_MIN_ZOOM) {
-    return;
-  }
+  // No selected county — use legacy CDN tiles if available
+  if (highResCountyTilesReady || highResLoadInFlight) { ensureBoundaryVisibility(); return; }
   highResLoadInFlight = true;
   try {
-    if (countyCache.high) {
-      buildHighResCountyTiles(countyCache.high);
-      ensureBoundaryVisibility();
-      return;
-    }
-    if (typeof topojson === "undefined") {
-      throw new Error("TopoJSON library not loaded.");
-    }
+    if (countyCache.high) { buildHighResCountyTiles(countyCache.high); ensureBoundaryVisibility(); return; }
+    if (typeof topojson === "undefined") throw new Error("TopoJSON library not loaded.");
     const highUrls = [
       "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-5m.json",
       "https://unpkg.com/us-atlas@3/counties-5m.json",
-      "https://cdnjs.cloudflare.com/ajax/libs/us-atlas/3.0.1/counties-5m.json"
     ];
     const topoData = await fetchTopoJson(highUrls, "high-res county boundaries");
     const geojson = topojson.feature(topoData, topoData.objects.counties);
@@ -2286,8 +2441,8 @@ function findCountyByName(stateFips, countyName) {
     const feature = layer.feature;
     if (!feature) return;
     
-    // County features from us-atlas have id like "06001" (state+county FIPS)
-    const featureId = String(feature.id || "");
+    // County features have id as 5-digit FIPS (set on both us-atlas and worker-loaded features)
+    const featureId = String(feature.id || feature.properties?.fips5 || "");
     const featureStateFips = featureId.substring(0, 2);
     
     if (featureStateFips === stateFips) {
@@ -2393,7 +2548,7 @@ async function fetchTopoJson(urls, label) {
 }
 
 const debouncedRefresh = debounce(refreshData, 400);
-const debouncedHighResLoad = debounce(loadHighResCounties, 700);
+const debouncedHighResLoad = debounce(workerLoadHiResCounty, 700);
 
 daysInput.addEventListener("input", () => {
   daysValue.textContent = daysInput.value;
@@ -2860,13 +3015,19 @@ loadAbaMeta();
 map.on("zoomend", () => loadCountyBoundaries());
 map.on("zoomend", () => applyBoundaryStyles());
 map.on("moveend", () => {
-  if (map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM) {
+  if (map.getZoom() > 9) {
     debouncedHighResLoad();
   }
 });
 map.on("zoomend", () => {
+  if (map.getZoom() <= 9 && lastWorkerHiResFips5) {
+    // Zoomed out — clear worker hi-res, revert to lo-res outline
+    highResCountyLayer.clearLayers();
+    lastWorkerHiResFips5 = null;
+    highResCountyTilesReady = false;
+  }
   ensureBoundaryVisibility();
-  if (map.getZoom() >= HIGH_RES_VISUAL_MIN_ZOOM) {
+  if (map.getZoom() > 9) {
     debouncedHighResLoad();
   }
 });
