@@ -403,14 +403,18 @@ export default {
         const res = await ebirdFetch(env, '/data/obs/US/recent/notable', { detail: 'simple', back });
         const raw = await res.json();
         if (!Array.isArray(raw)) return jsonResponse(request, 502, { error: 'Unexpected eBird response' });
-        const counts = {};
+        const states = {};
         for (const item of raw) {
           const code = (item.subnational1Code || '').toUpperCase();
           if (!code.startsWith('US-')) continue;
           const st = code.slice(3);
-          counts[st] = (counts[st] || 0) + 1;
+          const abaCode = getAbaCode(item.comName || '');
+          const slot = String(abaCode !== null ? abaCode : 0);
+          if (!states[st]) states[st] = { total: 0, aba: {} };
+          states[st].total++;
+          states[st].aba[slot] = (states[st].aba[slot] || 0) + 1;
         }
-        return jsonResponse(request, 200, { back, states: counts }, {
+        return jsonResponse(request, 200, { back, states }, {
           'Cache-Control': 'public, max-age=1800',
         });
       }

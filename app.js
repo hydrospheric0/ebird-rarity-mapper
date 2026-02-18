@@ -745,7 +745,18 @@ async function fetchUsNotableCounts(back) {
     const res = await fetch(`${WORKER_BASE_URL}/api/us_notable_counts?back=${back}`);
     if (!res.ok) throw new Error(`us_notable_counts ${res.status}`);
     const data = await res.json();
-    usNotableCountsCache = data.states || {};
+    // Normalise: worker now returns {total, aba:{"1":n,...}} per state
+    // Fall back gracefully if old format (plain number) is received
+    const raw = data.states || {};
+    const normalised = {};
+    for (const [st, val] of Object.entries(raw)) {
+      if (typeof val === 'number') {
+        normalised[st] = { total: val, aba: {} };
+      } else {
+        normalised[st] = val;
+      }
+    }
+    usNotableCountsCache = normalised;
     usNotableCountsBack = back;
     return usNotableCountsCache;
   } catch (e) {
@@ -765,19 +776,40 @@ async function renderStateClusterMarkers(activeStateCode, back) {
   if (!counts) return;
 
   stateClusterLayer.clearLayers();
-  Object.entries(counts).forEach(([stateCode, total]) => {
+  Object.entries(counts).forEach(([stateCode, info]) => {
+    const total = info.total || 0;
     if (!total || stateCode === activeStateCode) return;
     const centroid = STATE_CENTROIDS[stateCode];
     if (!centroid) return;
-    // Use a neutral gray color for state dots (no ABA code detail at this level)
-    const color = '#6b7280';
+
+    // Find highest ABA code present
+    const abaCounts = info.aba || {};
+    let highestCode = 0;
+    for (const [codeStr, n] of Object.entries(abaCounts)) {
+      const c = parseInt(codeStr, 10);
+      if (n > 0 && c > highestCode) highestCode = c;
+    }
+    const color = highestCode > 0 ? getAbaColor(highestCode) : '#6b7280';
+
+    // Build ABA breakdown for tooltip
+    const abaLabels = [];
+    for (let c = 1; c <= 6; c++) {
+      const n = abaCounts[String(c)];
+      if (n) abaLabels.push(`<span style="color:${getAbaColor(c)};font-weight:bold">${n}×${c}</span>`);
+    }
+    const unknownN = abaCounts['0'];
+    if (unknownN) abaLabels.push(`<span style="color:#9ca3af">${unknownN}×?</span>`);
+
+    const tooltipHtml = `<strong>${stateCode}</strong> — ${total} notable${total !== 1 ? 's' : ''}`
+      + (abaLabels.length ? `<br/>${abaLabels.join('&nbsp; ')}` : '');
+
     const marker = L.marker(centroid, {
       pane: 'markersPane',
       icon: getClusterIcon(total, color),
       riseOnHover: true,
       riseOffset: 250,
     });
-    marker.bindTooltip(`<strong>${stateCode}</strong><br/>${total} notables`, { sticky: true, direction: 'top' });
+    marker.bindTooltip(tooltipHtml, { sticky: true, direction: 'top' });
     marker.on('click', () => {
       const regionCode = `US-${stateCode}`;
       const option = Array.from(regionSelect?.options || []).find(o => o.value === regionCode);
