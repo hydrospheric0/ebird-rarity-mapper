@@ -149,30 +149,7 @@ const highResCountyLayer = L.geoJSON(null, {
 
 const countyLabelLayer = L.layerGroup().addTo(map);
 const countyClusterLabelLayer = L.layerGroup(); // not added to map — controlled by showCountyLabels + zoom
-const stateClusterLayer = L.layerGroup().addTo(map);
 const HIGH_RES_VISUAL_MIN_ZOOM = 8;
-
-// Approximate geographic centroids for US states (for state cluster dot placement)
-const STATE_CENTROIDS = {
-  AL:[ 32.806671,-86.791130], AK:[ 61.370716,-152.404419], AZ:[ 33.729759,-111.431221],
-  AR:[ 34.969704,-92.373123], CA:[ 36.116203,-119.681564], CO:[ 39.059811,-105.311104],
-  CT:[ 41.597782,-72.755371], DE:[ 39.318523,-75.507141], FL:[ 27.766279,-81.686783],
-  GA:[ 33.040619,-83.643074], HI:[ 21.094318,-157.498337], ID:[ 44.240459,-114.478828],
-  IL:[ 40.349457,-88.986137], IN:[ 39.849426,-86.258278], IA:[ 42.011539,-93.210526],
-  KS:[ 38.526600,-96.726486], KY:[ 37.668140,-84.670067], LA:[ 31.169960,-91.867805],
-  ME:[ 44.693947,-69.381927], MD:[ 39.063946,-76.802101], MA:[ 42.230171,-71.530106],
-  MI:[ 43.326618,-84.536095], MN:[ 45.694454,-93.900192], MS:[ 32.741646,-89.678696],
-  MO:[ 38.456085,-92.288368], MT:[ 46.921925,-110.454353], NE:[ 41.125370,-98.268082],
-  NV:[ 38.313515,-117.055374], NH:[ 43.452492,-71.563896], NJ:[ 40.298904,-74.521011],
-  NM:[ 34.840515,-106.248482], NY:[ 42.165726,-74.948051], NC:[ 35.630066,-79.806419],
-  ND:[ 47.528912,-99.784012], OH:[ 40.388783,-82.764915], OK:[ 35.565342,-96.928917],
-  OR:[ 44.572021,-122.070938], PA:[ 40.590752,-77.209755], RI:[ 41.680893,-71.511780],
-  SC:[ 33.856892,-80.945007], SD:[ 44.299782,-99.438828], TN:[ 35.747845,-86.692345],
-  TX:[ 31.054487,-97.563461], UT:[ 40.150032,-111.862434], VT:[ 44.045876,-72.710686],
-  VA:[ 37.769337,-78.169968], WA:[ 47.400902,-121.490494], WV:[ 38.491226,-80.954453],
-  WI:[ 44.268543,-89.616508], WY:[ 42.755966,-107.302490], DC:[ 38.897438,-77.026817],
-  PR:[ 18.220833,-66.590149], VI:[ 18.335765,-64.896335],
-};
 let highResCountyTilesLayer = null;
 let highResCountyTilesReady = false;
 
@@ -734,101 +711,6 @@ function renderMapPinButton(lat, lng, label) {
   return `<button type="button" class="row-map-btn" data-map-url="${escapeAttr(url)}" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">📍</button>`;
 }
 
-// National state notable counts cache: { back -> { states: {ST: count} } }
-let usNotableCountsCache = null;
-let usNotableCountsBack = null;
-let usNotableCountsPromise = null; // shared in-flight promise
-
-async function fetchUsNotableCounts(back) {
-  if (usNotableCountsCache && usNotableCountsBack === back) return usNotableCountsCache;
-  // Reuse an already-in-flight request so concurrent callers wait, not bail
-  if (usNotableCountsPromise) return usNotableCountsPromise;
-  usNotableCountsPromise = (async () => {
-    try {
-      const res = await fetch(`${WORKER_BASE_URL}/api/us_notable_counts?back=${back}`);
-      if (!res.ok) throw new Error(`us_notable_counts ${res.status}`);
-      const data = await res.json();
-      // Normalise: worker now returns {total, aba:{"1":n,...}} per state
-      // Fall back gracefully if old format (plain number) is received
-      const raw = data.states || {};
-      const normalised = {};
-      for (const [st, val] of Object.entries(raw)) {
-        if (typeof val === 'number') {
-          normalised[st] = { total: val, aba: {} };
-        } else {
-          normalised[st] = val;
-        }
-      }
-      usNotableCountsCache = normalised;
-      usNotableCountsBack = back;
-      return usNotableCountsCache;
-    } catch (e) {
-      console.warn('[state-counts] Failed to load US notable counts:', e);
-      return null;
-    } finally {
-      usNotableCountsPromise = null;
-    }
-  })();
-  return usNotableCountsPromise;
-}
-
-function clearStateClusterMarkers() {
-  stateClusterLayer.clearLayers();
-}
-
-async function renderStateClusterMarkers(activeStateCode, back, opts = {}) {
-  const { skipActiveState = true } = opts;
-  const counts = await fetchUsNotableCounts(back);
-  if (!counts) return;
-
-  stateClusterLayer.clearLayers();
-  Object.entries(counts).forEach(([stateCode, info]) => {
-    const total = info.total || 0;
-    if (!total) return;
-    if (skipActiveState && stateCode === activeStateCode) return;
-    const centroid = STATE_CENTROIDS[stateCode];
-    if (!centroid) return;
-
-    // Find highest ABA code present
-    const abaCounts = info.aba || {};
-    let highestCode = 0;
-    for (const [codeStr, n] of Object.entries(abaCounts)) {
-      const c = parseInt(codeStr, 10);
-      if (n > 0 && c > highestCode) highestCode = c;
-    }
-    const color = highestCode > 0 ? getAbaColor(highestCode) : '#6b7280';
-
-    // Build ABA breakdown for tooltip
-    const abaLabels = [];
-    for (let c = 1; c <= 6; c++) {
-      const n = abaCounts[String(c)];
-      if (n) abaLabels.push(`<span style="color:${getAbaColor(c)};font-weight:bold">${n}×${c}</span>`);
-    }
-    const unknownN = abaCounts['0'];
-    if (unknownN) abaLabels.push(`<span style="color:#9ca3af">${unknownN}×?</span>`);
-
-    const tooltipHtml = `<strong>${stateCode}</strong> — ${total} notable${total !== 1 ? 's' : ''}`
-      + (abaLabels.length ? `<br/>${abaLabels.join('&nbsp; ')}` : '');
-
-    const marker = L.marker(centroid, {
-      pane: 'markersPane',
-      icon: getClusterIcon(total, color),
-      riseOnHover: true,
-      riseOffset: 250,
-    });
-    marker.bindTooltip(tooltipHtml, { sticky: true, direction: 'top' });
-    marker.on('click', () => {
-      const regionCode = `US-${stateCode}`;
-      const option = Array.from(regionSelect?.options || []).find(o => o.value === regionCode);
-      if (option) {
-        regionSelect.value = regionCode;
-        regionSelect.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-    stateClusterLayer.addLayer(marker);
-  });
-}
-
 function clearMarkers() {
   notReviewedLayer.clearLayers();
   acceptedLayer.clearLayers();
@@ -852,7 +734,6 @@ function syncObservationLayerVisibility() {
   setOverlay(notReviewedLayer, notableEnabled);
   setOverlay(acceptedLayer, notableEnabled);
   setOverlay(abaLayer, lower48Enabled);
-  setOverlay(stateClusterLayer, notableEnabled || lower48Enabled);
 }
 
 const markerIconCache = new Map();
@@ -933,7 +814,7 @@ function renderAbaMarkers(data) {
   // Keep it for compatibility but it should not be used directly
 }
 
-async function renderAllMarkers() {
+function renderAllMarkers() {
   // Clear all markers
   clearMarkers();
   clearAbaMarkers();
@@ -1000,10 +881,6 @@ async function renderAllMarkers() {
   }
 
   // Render each county group
-  // Await state cluster dots so syncObservationLayerVisibility runs after they are added
-  const hasActiveStateData = countyGroups.size > 0;
-  await renderStateClusterMarkers(activeStateCode, backDays, { skipActiveState: hasActiveStateData });
-
   countyGroups.forEach((sources, countyKey) => {
     const [keyState, keyCounty] = countyKey.split("|");
     const isSelectedCounty = selectedCountyState && selectedCountyName && 
@@ -2609,8 +2486,6 @@ daysInput.addEventListener("input", () => {
 });
 
 daysInput.addEventListener("change", () => {
-  usNotableCountsCache = null; // invalidate national counts when days changes
-  usNotableCountsPromise = null;
   refreshData();
 });
 
@@ -3070,11 +2945,6 @@ if (countyCodeMin && countyCodeValue) {
 
 loadRegions().then(refreshData);
 loadAbaMeta();
-// Eagerly load state cluster dots — show all states including active (no data yet)
-(async () => {
-  const back = Number.isFinite(Number(daysInput?.value)) ? Math.max(1, Math.min(14, Number(daysInput.value))) : 7;
-  await renderStateClusterMarkers(null, back, { skipActiveState: false });
-})();
 map.on("zoomend", () => loadCountyBoundaries());
 map.on("zoomend", () => applyBoundaryStyles());
 map.on("zoomend", () => {
