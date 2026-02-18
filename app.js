@@ -2,8 +2,8 @@
 const WORKER_BASE_URL = 'https://ebird-rarity-mapper.bartwickel.workers.dev';
 
 const map = L.map("map", {
-  center: [37.25, -119.5],
-  zoom: 7,
+  center: [38.5, -96],
+  zoom: 4,
   zoomControl: false,
   zoomAnimation: true,
   fadeAnimation: true,
@@ -774,14 +774,16 @@ function clearStateClusterMarkers() {
   stateClusterLayer.clearLayers();
 }
 
-async function renderStateClusterMarkers(activeStateCode, back) {
+async function renderStateClusterMarkers(activeStateCode, back, opts = {}) {
+  const { skipActiveState = true } = opts;
   const counts = await fetchUsNotableCounts(back);
   if (!counts) return;
 
   stateClusterLayer.clearLayers();
   Object.entries(counts).forEach(([stateCode, info]) => {
     const total = info.total || 0;
-    if (!total || stateCode === activeStateCode) return;
+    if (!total) return;
+    if (skipActiveState && stateCode === activeStateCode) return;
     const centroid = STATE_CENTROIDS[stateCode];
     if (!centroid) return;
 
@@ -933,7 +935,6 @@ function renderAllMarkers() {
   // Clear all markers
   clearMarkers();
   clearAbaMarkers();
-  clearStateClusterMarkers();
   if (countyLabelLayer) countyLabelLayer.clearLayers();
   
   const highlight = activeSpeciesHighlight
@@ -950,9 +951,8 @@ function renderAllMarkers() {
   const activeStateCode = activeRegion.startsWith('US-') ? activeRegion.slice(3) : activeRegion;
   const backDays = Number.isFinite(Number(daysInput?.value)) ? Math.max(1, Math.min(14, Number(daysInput.value))) : 7;
 
-  // Render state-level cluster dots for all non-active states (async, from national counts API)
+  // Render state-level cluster dots — deferred until after countyGroups is built
   clearStateClusterMarkers();
-  void renderStateClusterMarkers(activeStateCode, backDays);
 
   // Group all observations by county from both sources
   const countyGroups = new Map();
@@ -998,6 +998,10 @@ function renderAllMarkers() {
   }
 
   // Render each county group
+  // Now fire state cluster dots — skip active state only when it has actual county data
+  const hasActiveStateData = countyGroups.size > 0;
+  void renderStateClusterMarkers(activeStateCode, backDays, { skipActiveState: hasActiveStateData });
+
   countyGroups.forEach((sources, countyKey) => {
     const [keyState, keyCounty] = countyKey.split("|");
     const isSelectedCounty = selectedCountyState && selectedCountyName && 
@@ -3052,14 +3056,10 @@ if (countyCodeMin && countyCodeValue) {
 
 loadRegions().then(refreshData);
 loadAbaMeta();
-// Eagerly load state cluster dots — they come from a national API independent
-// of the per-state region fetch, so trigger immediately so they appear on the
-// map as soon as possible rather than waiting for refreshData to complete.
+// Eagerly load state cluster dots — show all states including active (no data yet)
 (async () => {
   const back = Number.isFinite(Number(daysInput?.value)) ? Math.max(1, Math.min(14, Number(daysInput.value))) : 7;
-  const activeRegion = regionSelect?.value || DEFAULT_REGION;
-  const activeStateCode = activeRegion.startsWith('US-') ? activeRegion.slice(3) : activeRegion;
-  await renderStateClusterMarkers(activeStateCode, back);
+  await renderStateClusterMarkers(null, back, { skipActiveState: false });
 })();
 map.on("zoomend", () => loadCountyBoundaries());
 map.on("zoomend", () => applyBoundaryStyles());
