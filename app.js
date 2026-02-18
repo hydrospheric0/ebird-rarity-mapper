@@ -931,6 +931,7 @@ function renderAllMarkers() {
   clearMarkers();
   clearAbaMarkers();
   clearStateClusterMarkers();
+  if (countyLabelLayer) countyLabelLayer.clearLayers();
   
   const highlight = activeSpeciesHighlight
     ? String(activeSpeciesHighlight).toLowerCase()
@@ -1190,6 +1191,26 @@ function renderAllMarkers() {
           highlightMarkers.push(marker);
         }
       });
+
+      // Label for the selected county (since cluster label is skipped)
+      if (countyLabelLayer && selectedCounty && typeof turf !== 'undefined') {
+        try {
+          const center = turf.centroid(selectedCounty);
+          const coords = center?.geometry?.coordinates;
+          if (coords && coords.length === 2) {
+            const selLabel = L.marker([coords[1], coords[0]], {
+              pane: "countyLabelPane",
+              interactive: false,
+              icon: L.divIcon({
+                className: "county-label",
+                html: `<div class="county-label-text">${selectedCountyName || keyCounty}</div>`,
+                iconSize: null
+              })
+            });
+            countyLabelLayer.addLayer(selLabel);
+          }
+        } catch (_) {}
+      }
     } else {
       // Show single cluster marker for collapsed county
       // Use county polygon centroid instead of averaging observation points
@@ -1264,6 +1285,22 @@ function renderAllMarkers() {
       clusterTargetLayer.addLayer(clusterMarker);
       if (hasHighlight) {
         highlightMarkers.push(clusterMarker);
+      }
+
+      // County name label below the cluster dot
+      if (countyLabelLayer) {
+        const clusterSize = Math.min(40 + Math.log(totalCount) * 5, 60);
+        const labelMarker = L.marker([centerLat, centerLng], {
+          pane: "countyLabelPane",
+          interactive: false,
+          icon: L.divIcon({
+            className: "county-cluster-label",
+            html: `<div class="county-cluster-label-text">${county}</div>`,
+            iconSize: null,
+            iconAnchor: [0, -(clusterSize / 2 + 3)]
+          })
+        });
+        countyLabelLayer.addLayer(labelMarker);
       }
     }
   });
@@ -2052,27 +2089,6 @@ function toggleCountySelection(feature, layer) {
     setStatus(`Filtering by county: ${label}`);
     selectedCountyLayer.bringToFront();
     zoomToCountyLayer(layer);
-    if (countyLabelLayer && typeof turf !== "undefined") {
-      countyLabelLayer.clearLayers();
-      try {
-        const center = turf.centerOfMass(feature);
-        const coords = center?.geometry?.coordinates;
-        if (coords && coords.length === 2) {
-          const marker = L.marker([coords[1], coords[0]], {
-            pane: "countyLabelPane",
-            interactive: false,
-            icon: L.divIcon({
-              className: "county-label",
-              html: `<div class="county-label-text">${label}</div>`,
-              iconSize: null
-            })
-          });
-          countyLabelLayer.addLayer(marker);
-        }
-      } catch (error) {
-        console.error(error);
-      }
-    }
     updateSelectedRegionTitle();
   }
   const filtered = getFilteredData();

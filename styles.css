@@ -736,8 +736,29 @@ h6 {
   text-align: center;
 }
 
-.col-map-kml-btn {
+.county-cluster-label {
+  background: transparent;
   border: none;
+  pointer-events: none;
+}
+
+.county-cluster-label-text {
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #f9fafb;
+  text-shadow:
+    0 0 3px rgba(0,0,0,0.9),
+    0 1px 3px rgba(0,0,0,0.8),
+    -1px 0 2px rgba(0,0,0,0.7),
+    1px 0 2px rgba(0,0,0,0.7);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding-top: 2px;
+}
+
+.col-map-kml-btn {  border: none;
   background: transparent;
   color: var(--muted);
   padding: 0;
