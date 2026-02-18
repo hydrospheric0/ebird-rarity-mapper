@@ -2,8 +2,8 @@
 const WORKER_BASE_URL = 'https://ebird-rarity-mapper.bartwickel.workers.dev';
 
 const map = L.map("map", {
-  center: [38.5, -96],
-  zoom: 4,
+  center: [37.25, -119.5],
+  zoom: 7,
   zoomControl: false,
   zoomAnimation: true,
   fadeAnimation: true,
@@ -931,7 +931,7 @@ function renderAbaMarkers(data) {
   // Keep it for compatibility but it should not be used directly
 }
 
-function renderAllMarkers() {
+async function renderAllMarkers() {
   // Clear all markers
   clearMarkers();
   clearAbaMarkers();
@@ -952,7 +952,6 @@ function renderAllMarkers() {
   const backDays = Number.isFinite(Number(daysInput?.value)) ? Math.max(1, Math.min(14, Number(daysInput.value))) : 7;
 
   // Render state-level cluster dots — deferred until after countyGroups is built
-  clearStateClusterMarkers();
 
   // Group all observations by county from both sources
   const countyGroups = new Map();
@@ -998,9 +997,9 @@ function renderAllMarkers() {
   }
 
   // Render each county group
-  // Now fire state cluster dots — skip active state only when it has actual county data
+  // Await state cluster dots so syncObservationLayerVisibility runs after they are added
   const hasActiveStateData = countyGroups.size > 0;
-  void renderStateClusterMarkers(activeStateCode, backDays, { skipActiveState: hasActiveStateData });
+  await renderStateClusterMarkers(activeStateCode, backDays, { skipActiveState: hasActiveStateData });
 
   countyGroups.forEach((sources, countyKey) => {
     const [keyState, keyCounty] = countyKey.split("|");
