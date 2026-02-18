@@ -735,36 +735,39 @@ function renderMapPinButton(lat, lng, label) {
 // National state notable counts cache: { back -> { states: {ST: count} } }
 let usNotableCountsCache = null;
 let usNotableCountsBack = null;
-let usNotableCountsInFlight = false;
+let usNotableCountsPromise = null; // shared in-flight promise
 
 async function fetchUsNotableCounts(back) {
   if (usNotableCountsCache && usNotableCountsBack === back) return usNotableCountsCache;
-  if (usNotableCountsInFlight) return null;
-  usNotableCountsInFlight = true;
-  try {
-    const res = await fetch(`${WORKER_BASE_URL}/api/us_notable_counts?back=${back}`);
-    if (!res.ok) throw new Error(`us_notable_counts ${res.status}`);
-    const data = await res.json();
-    // Normalise: worker now returns {total, aba:{"1":n,...}} per state
-    // Fall back gracefully if old format (plain number) is received
-    const raw = data.states || {};
-    const normalised = {};
-    for (const [st, val] of Object.entries(raw)) {
-      if (typeof val === 'number') {
-        normalised[st] = { total: val, aba: {} };
-      } else {
-        normalised[st] = val;
+  // Reuse an already-in-flight request so concurrent callers wait, not bail
+  if (usNotableCountsPromise) return usNotableCountsPromise;
+  usNotableCountsPromise = (async () => {
+    try {
+      const res = await fetch(`${WORKER_BASE_URL}/api/us_notable_counts?back=${back}`);
+      if (!res.ok) throw new Error(`us_notable_counts ${res.status}`);
+      const data = await res.json();
+      // Normalise: worker now returns {total, aba:{"1":n,...}} per state
+      // Fall back gracefully if old format (plain number) is received
+      const raw = data.states || {};
+      const normalised = {};
+      for (const [st, val] of Object.entries(raw)) {
+        if (typeof val === 'number') {
+          normalised[st] = { total: val, aba: {} };
+        } else {
+          normalised[st] = val;
+        }
       }
+      usNotableCountsCache = normalised;
+      usNotableCountsBack = back;
+      return usNotableCountsCache;
+    } catch (e) {
+      console.warn('[state-counts] Failed to load US notable counts:', e);
+      return null;
+    } finally {
+      usNotableCountsPromise = null;
     }
-    usNotableCountsCache = normalised;
-    usNotableCountsBack = back;
-    return usNotableCountsCache;
-  } catch (e) {
-    console.warn('[state-counts] Failed to load US notable counts:', e);
-    return null;
-  } finally {
-    usNotableCountsInFlight = false;
-  }
+  })();
+  return usNotableCountsPromise;
 }
 
 function clearStateClusterMarkers() {
@@ -2601,6 +2604,7 @@ daysInput.addEventListener("input", () => {
 
 daysInput.addEventListener("change", () => {
   usNotableCountsCache = null; // invalidate national counts when days changes
+  usNotableCountsPromise = null;
   refreshData();
 });
 
@@ -3048,6 +3052,15 @@ if (countyCodeMin && countyCodeValue) {
 
 loadRegions().then(refreshData);
 loadAbaMeta();
+// Eagerly load state cluster dots — they come from a national API independent
+// of the per-state region fetch, so trigger immediately so they appear on the
+// map as soon as possible rather than waiting for refreshData to complete.
+(async () => {
+  const back = Number.isFinite(Number(daysInput?.value)) ? Math.max(1, Math.min(14, Number(daysInput.value))) : 7;
+  const activeRegion = regionSelect?.value || DEFAULT_REGION;
+  const activeStateCode = activeRegion.startsWith('US-') ? activeRegion.slice(3) : activeRegion;
+  await renderStateClusterMarkers(activeStateCode, back);
+})();
 map.on("zoomend", () => loadCountyBoundaries());
 map.on("zoomend", () => applyBoundaryStyles());
 map.on("moveend", () => {
