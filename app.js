@@ -200,11 +200,12 @@ function ensureBoundaryVisibility() {
   const useWorkerHiRes = countyEnabled && lastWorkerHiResFips5 && highResCountyLayer.getLayers().length > 0 && map.getZoom() > 9;
   const showHighResVisual = countyEnabled && shouldUseHighResCountyVisual();
   setOverlay(stateLayer, true);
-  // When worker hi-res is active for a county, hide the lo-res outline; otherwise show it
-  setOverlay(countyLayer, countyEnabled && !useWorkerHiRes);
+  // countyLayer always shows when county map is enabled (lo-res outlines for all counties)
+  setOverlay(countyLayer, countyEnabled);
+  // Worker hi-res layer draws on top for the selected county at zoom > 9
   setOverlay(highResCountyLayer, useWorkerHiRes);
   if (highResCountyTilesLayer) {
-    // Only show vectorGrid tiles as fallback when no worker data
+    // Legacy vectorGrid tiles: only when no worker hi-res active
     setOverlay(highResCountyTilesLayer, showHighResVisual && !useWorkerHiRes);
   }
   countyLayer.bringToFront();
@@ -227,22 +228,13 @@ function applyBoundaryStyles() {
 function getCountyStyle(feature) {
   const id = feature?.id || feature?.properties?.id || null;
   const isSelected = selectedCountyId && id && id === selectedCountyId;
-  const useHighResVisual = shouldUseHighResCountyVisual();
   if (isSelected) {
     return {
       ...countyBaseStyle,
       color: "#ef4444",
-      weight: useHighResVisual ? 2.2 : 1.8,
+      weight: 1.8,
       opacity: 1,
-      fillOpacity: useHighResVisual ? 0.03 : 0.08
-    };
-  }
-  if (useHighResVisual) {
-    return {
-      ...countyBaseStyle,
-      opacity: 0,
-      fillOpacity: 0,
-      weight: 8
+      fillOpacity: 0.08
     };
   }
   return { ...countyBaseStyle };
@@ -2371,7 +2363,6 @@ async function workerLoadHiResCounty() {
     highResCountyLayer.addData(geo);
     highResCountyLayer.setStyle(getCountyStyle);
     lastWorkerHiResFips5 = fips5;
-    highResCountyTilesReady = true;
     ensureBoundaryVisibility();
   } catch (e) {
     console.warn('[hi-res] county_hires failed:', e);
