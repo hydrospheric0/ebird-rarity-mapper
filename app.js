@@ -123,10 +123,10 @@ const stateLayer = L.geoJSON(null, {
 }).addTo(map);
 
 const countyBaseStyle = {
-  color: "#1f2937",
-  weight: 1.4,
-  opacity: 1,
-  fillOpacity: 0.03
+  color: "#6b7280",
+  weight: 0.7,
+  opacity: 0.45,
+  fillOpacity: 0
 };
 
 const countyLayer = L.geoJSON(null, {
@@ -2244,111 +2244,34 @@ map.on("locationerror", () => {
 });
 
 async function loadCountyBoundaries() {
-  // Sample viewport points → resolve each to (stateCode, lat, lon) → call
-  // county_outline once per uncached state using a point known to be in it.
-  // Falls back to legacy us-atlas CDN if the worker is unavailable.
+  // Always load the full US county set (10m TopoJSON, ~350KB gzipped, CDN-cached).
+  // This ensures all states are visible at all zoom levels.
+  // Hi-res TIGER overlay is handled separately by workerLoadHiResCounty at zoom > 9.
   try {
-    const bounds = map.getBounds();
-    const center = bounds.getCenter();
-
-    const samplePoints = [
-      center,
-      bounds.getNorthWest(), bounds.getNorthEast(),
-      bounds.getSouthWest(), bounds.getSouthEast(),
+    if (countyCache.low) {
+      applyCountyData(countyCache.low);
+      if (map.getZoom() > 9) void workerLoadHiResCounty();
+      return;
+    }
+    if (typeof topojson === "undefined") throw new Error("TopoJSON not loaded.");
+    const urls = [
+      "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json",
+      "https://unpkg.com/us-atlas@3/counties-10m.json",
     ];
-
-    // Resolve all sample points in parallel → collect { stateCode, lat, lon }
-    const resolvedByState = new Map(); // stateCode → { lat, lon }
-    await Promise.all(samplePoints.map(async (pt) => {
-      try {
-        const res = await fetch(`${WORKER_BASE_URL}/api/county_resolve?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.stateCode && !resolvedByState.has(data.stateCode)) {
-          resolvedByState.set(data.stateCode, { lat: pt.lat, lon: pt.lng });
-        }
-      } catch { /* ignore */ }
-    }));
-
-    if (resolvedByState.size === 0) {
-      throw new Error("No states resolved for current viewport");
-    }
-
-    // Fetch county_outline for each uncached state using the resolved point
-    const toFetch = [...resolvedByState.entries()].filter(([sc]) => !workerCountyCache.has(sc));
-    if (toFetch.length > 0) {
-      await Promise.all(toFetch.map(async ([sc, pt]) => {
-        try {
-          const res = await fetch(`${WORKER_BASE_URL}/api/county_outline?lat=${pt.lat.toFixed(5)}&lon=${pt.lon.toFixed(5)}`);
-          if (!res.ok) return;
-          const geo = await res.json();
-          if (!geo?.features?.length) return;
-          const neutralFeatures = geo.features.map(f => ({
-            ...f,
-            id: f.properties?.fips5 || f.id || null,
-            properties: { ...f.properties, isActiveCounty: false },
-          }));
-          workerCountyCache.set(sc, { type: 'FeatureCollection', features: neutralFeatures });
-        } catch (e) {
-          console.warn(`[county] outline fetch failed for ${sc}:`, e);
-        }
-      }));
-    }
-
-    // Merge all cached states and apply to map
-    const allFeatures = [];
-    for (const sc of resolvedByState.keys()) {
-      const geo = workerCountyCache.get(sc);
-      if (geo?.features) allFeatures.push(...geo.features);
-    }
-
-    if (allFeatures.length === 0) throw new Error("No county features loaded from worker");
-
-    lastLoadedStateCodes = new Set(resolvedByState.keys());
-    applyCountyData({ type: 'FeatureCollection', features: allFeatures });
-
-    if (map.getZoom() > 9) workerLoadHiResCounty();
-
+    const topoData = await fetchTopoJson(urls, "county boundaries");
+    const geojson = topojson.feature(topoData, topoData.objects.counties);
+    countyCache.low = geojson;
+    applyCountyData(geojson);
+    if (map.getZoom() > 9) void workerLoadHiResCounty();
   } catch (error) {
-    console.warn("[county] Worker county load failed, falling back to us-atlas:", error);
-    await loadCountyBoundariesLegacy();
+    console.error("[county] Failed to load US counties:", error);
+    setStatus("County boundaries unavailable.");
   }
 }
 
 async function loadCountyBoundariesLegacy() {
-  // Legacy fallback: us-atlas TopoJSON from CDN
-  try {
-    if (typeof topojson === "undefined") throw new Error("TopoJSON library not loaded.");
-    if (typeof turf === "undefined") throw new Error("Turf.js library not loaded.");
-    let desired = getCountyResolutionForZoom(map.getZoom());
-    if (desired === countyResolution && countyCache[desired]) {
-      applyCountyData(countyCache[desired]);
-      return;
-    }
-    const highUrls = [
-      "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-5m.json",
-      "https://unpkg.com/us-atlas@3/counties-5m.json",
-    ];
-    const lowUrls = [
-      "https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json",
-      "https://unpkg.com/us-atlas@3/counties-10m.json",
-    ];
-    let topoData = null;
-    try {
-      topoData = await fetchTopoJson(desired === "high" ? highUrls : lowUrls, "county boundaries");
-    } catch (e) {
-      if (desired === "high") { desired = "low"; topoData = await fetchTopoJson(lowUrls, "county boundaries"); }
-      else throw e;
-    }
-    const geojson = topojson.feature(topoData, topoData.objects.counties);
-    countyCache[desired] = geojson;
-    countyResolution = desired;
-    if (desired === "high") buildHighResCountyTiles(geojson);
-    applyCountyData(geojson);
-  } catch (error) {
-    console.error(error);
-    setStatus("County boundaries unavailable.");
-  }
+  // Alias kept for any remaining call sites
+  return loadCountyBoundaries();
 }
 
 function getCountyResolutionForZoom(zoom) {
