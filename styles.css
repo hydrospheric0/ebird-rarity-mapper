@@ -692,7 +692,7 @@ h6 {
 }
 
 .sightings-table .col-map {
-  width: 1.65rem;
+  width: 2rem;
   text-align: center;
 }
 
@@ -736,10 +736,24 @@ h6 {
   text-align: center;
 }
 
-.table-export-row {
-  padding: 4px 0 1px;
+.col-map-kml-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
+}
+
+.col-map-kml-btn:hover {
+  color: var(--accent-teal, #4285f4);
+}
+
+.col-map-kml-btn:active {
+  color: var(--text);
 }
 
 .row-map-btn {
