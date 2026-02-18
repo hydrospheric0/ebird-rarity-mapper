@@ -2315,19 +2315,6 @@ function applyCountyData(geojson) {
 
 let highResLoadInFlight = false;
 
-// Worker-backed hi-res: fetch single-county TIGER geometry via county_hires endpoint.
-// Only fires when a county is selected and zoom > 9.
-async function workerLoadHiResCounty() {
-  if (map.getZoom() <= 9) {
-    // Zoomed out — restore lo-res outline for selected county if present
-    if (lastWorkerHiResFips5) {
-      highResCountyLayer.clearLayers();
-      lastWorkerHiResFips5 = null;
-      highResCountyTilesReady = false;
-      ensureBoundaryVisibility();
-    }
-    return;
-  }
 async function workerLoadHiResCounty() {
   if (map.getZoom() <= 9) {
     if (lastWorkerHiResFips5 || highResCountyLayer.getLayers().length > 0) {
