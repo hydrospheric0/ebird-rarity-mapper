@@ -2152,92 +2152,69 @@ map.on("locationerror", () => {
 });
 
 async function loadCountyBoundaries() {
-  // Derive which state(s) are visible from the current map bounds.
-  // We load per-state lo-res GeoJSON from the worker (CF-cached, fast).
-  // Falls back to legacy us-atlas CDN if the worker call fails.
+  // Sample viewport points → resolve each to (stateCode, lat, lon) → call
+  // county_outline once per uncached state using a point known to be in it.
+  // Falls back to legacy us-atlas CDN if the worker is unavailable.
   try {
     const bounds = map.getBounds();
     const center = bounds.getCenter();
 
-    // Collect unique state codes visible in current viewport by sampling corners + center
     const samplePoints = [
       center,
       bounds.getNorthWest(), bounds.getNorthEast(),
       bounds.getSouthWest(), bounds.getSouthEast(),
     ];
 
-    // Resolve county for each sample point to get state codes
-    const stateCodesNeeded = new Set();
+    // Resolve all sample points in parallel → collect { stateCode, lat, lon }
+    const resolvedByState = new Map(); // stateCode → { lat, lon }
     await Promise.all(samplePoints.map(async (pt) => {
       try {
-        const url = `${WORKER_BASE_URL}/api/county_resolve?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`;
-        const res = await fetch(url);
+        const res = await fetch(`${WORKER_BASE_URL}/api/county_resolve?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data?.stateCode) stateCodesNeeded.add(data.stateCode);
-      } catch { /* ignore individual resolve failures */ }
+        if (data?.stateCode && !resolvedByState.has(data.stateCode)) {
+          resolvedByState.set(data.stateCode, { lat: pt.lat, lon: pt.lng });
+        }
+      } catch { /* ignore */ }
     }));
 
-    if (stateCodesNeeded.size === 0) {
-      throw new Error("Could not resolve any states for current viewport");
+    if (resolvedByState.size === 0) {
+      throw new Error("No states resolved for current viewport");
     }
 
-    // Fetch any state we don't have cached yet
-    const toFetch = [...stateCodesNeeded].filter(sc => !workerCountyCache.has(sc));
+    // Fetch county_outline for each uncached state using the resolved point
+    const toFetch = [...resolvedByState.entries()].filter(([sc]) => !workerCountyCache.has(sc));
     if (toFetch.length > 0) {
-      await Promise.all(toFetch.map(async (sc) => {
+      await Promise.all(toFetch.map(async ([sc, pt]) => {
         try {
-          const url = `${WORKER_BASE_URL}/api/county_outline?lat=${center.lat.toFixed(5)}&lon=${center.lng.toFixed(5)}`;
-          // Use county_outline for the center point to get the main state; for
-          // adjacent states use the resolve result to build the outline URL.
-          const outlineUrl = `${WORKER_BASE_URL}/api/county_outline?lat=${center.lat.toFixed(5)}&lon=${center.lng.toFixed(5)}&stateCode=${encodeURIComponent(sc)}`;
-          // Simpler: county_outline always returns the full state for the given lat/lon
-          // For adjacent states, re-resolve a corner point that landed in that state
-          let outlineRes = null;
-          // Find a sample point that resolved to this state
-          for (const pt of samplePoints) {
-            try {
-              const rRes = await fetch(`${WORKER_BASE_URL}/api/county_resolve?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`);
-              if (!rRes.ok) continue;
-              const rData = await rRes.json();
-              if (rData?.stateCode === sc) {
-                outlineRes = await fetch(`${WORKER_BASE_URL}/api/county_outline?lat=${pt.lat.toFixed(5)}&lon=${pt.lng.toFixed(5)}`);
-                break;
-              }
-            } catch { continue; }
-          }
-          if (!outlineRes || !outlineRes.ok) return;
-          const geo = await outlineRes.json();
-          if (geo?.features?.length) {
-            // Store without isActiveCounty styling — desktop manages selection separately
-            const neutralFeatures = geo.features.map(f => ({
-              ...f,
-              // Ensure feature.id is set from fips5 for compatibility with
-              // existing selection logic (getSelectedCountyStateAbbrev etc.)
-              id: f.properties?.fips5 || f.id || null,
-              properties: { ...f.properties, isActiveCounty: false },
-            }));
-            workerCountyCache.set(sc, { type: 'FeatureCollection', features: neutralFeatures });
-          }
+          const res = await fetch(`${WORKER_BASE_URL}/api/county_outline?lat=${pt.lat.toFixed(5)}&lon=${pt.lon.toFixed(5)}`);
+          if (!res.ok) return;
+          const geo = await res.json();
+          if (!geo?.features?.length) return;
+          const neutralFeatures = geo.features.map(f => ({
+            ...f,
+            id: f.properties?.fips5 || f.id || null,
+            properties: { ...f.properties, isActiveCounty: false },
+          }));
+          workerCountyCache.set(sc, { type: 'FeatureCollection', features: neutralFeatures });
         } catch (e) {
-          console.warn(`[county] failed to load state ${sc}:`, e);
+          console.warn(`[county] outline fetch failed for ${sc}:`, e);
         }
       }));
     }
 
-    // Merge all cached states into a single GeoJSON and apply
+    // Merge all cached states and apply to map
     const allFeatures = [];
-    for (const sc of stateCodesNeeded) {
+    for (const sc of resolvedByState.keys()) {
       const geo = workerCountyCache.get(sc);
       if (geo?.features) allFeatures.push(...geo.features);
     }
 
     if (allFeatures.length === 0) throw new Error("No county features loaded from worker");
 
-    lastLoadedStateCodes = stateCodesNeeded;
+    lastLoadedStateCodes = new Set(resolvedByState.keys());
     applyCountyData({ type: 'FeatureCollection', features: allFeatures });
 
-    // If we're already zoomed in, fire hi-res for the selected county
     if (map.getZoom() > 9) workerLoadHiResCounty();
 
   } catch (error) {
@@ -2950,8 +2927,9 @@ map.whenReady(async () => {
   setOverlay(notReviewedLayer, showCountyMap?.checked ?? true);
   setOverlay(acceptedLayer, showCountyMap?.checked ?? true);
   setOverlay(abaLayer, showAbaMap?.checked ?? true);
-  await loadCountyBoundaries();
-  await loadStateBoundaries();
+  // Fire county + state loads concurrently, don't block eBird data
+  void loadCountyBoundaries();
+  void loadStateBoundaries();
   applyBoundaryStyles();
   ensureBoundaryVisibility();
   setTimeout(() => {
